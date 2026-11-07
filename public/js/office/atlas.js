@@ -8,10 +8,24 @@ export function loadAtlas() {
         if (!r.ok) throw new Error('Atlas kantor tidak ditemukan');
         return r.json();
       });
+      // onload/onerror instead of img.decode(): decode() can stay pending for cached images in some Chromium builds.
       const img = new Image();
-      img.decoding = 'async';
-      img.src = `/assets/${meta.image}?v=${meta.version}`;
-      await img.decode();
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Timeout memuat sprite sheet kantor')), 15000);
+        img.onload = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        img.onerror = () => {
+          clearTimeout(timer);
+          reject(new Error('Sprite sheet kantor gagal dimuat'));
+        };
+        img.src = `/assets/${meta.image}?v=${meta.version}`;
+        if (img.complete && img.naturalWidth) {
+          clearTimeout(timer);
+          resolve();
+        }
+      });
       return {
         img,
         frames: meta.frames,

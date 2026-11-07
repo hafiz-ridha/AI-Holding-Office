@@ -184,6 +184,7 @@ export function checkParent(parentId) {
   if (kids.some((k) => k.status === 'completed')) {
     q.run(`UPDATE tasks SET phase = 'synthesizing', status = 'assigned', updated_at = ? WHERE id = ?`, now(), parentId);
     logTask(parentId, 'synthesizing', root.kind === 'business' ? 'Subtugas selesai, Business Manager menyusun laporan' : 'Semua tugas turunan selesai, Group CEO menggabungkan hasil');
+    bus.emit('task:synthesizing', { task: getTask(parentId) });
     bus.emit('queue:wake');
   } else {
     failTask(root, 'Semua subtugas gagal atau dibatalkan');

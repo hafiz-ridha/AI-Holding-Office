@@ -28,7 +28,26 @@ export class OfficeEngine {
     this.visible = true;
     this.lastDraw = 0;
     this.selected = null;
+    this.speech = new Map(); // employeeId -> { lines, until }: short speech bubbles for real chat messages
     this.bindInput();
+  }
+
+  // Show what an agent just said in the chat above its character for a few seconds.
+  say(employeeId, text, ms = 7000) {
+    const clean = String(text || '').replace(/[#*_`>]/g, '').replace(/\s+/g, ' ').trim();
+    if (!clean) return;
+    const short = clean.length > 70 ? `${clean.slice(0, 68)}…` : clean;
+    const words = short.split(' ');
+    const lines = [''];
+    for (const w of words) {
+      const cur = lines[lines.length - 1];
+      if ((cur + ' ' + w).trim().length > 28 && cur) {
+        if (lines.length === 3) break;
+        lines.push(w);
+      } else lines[lines.length - 1] = (cur + ' ' + w).trim();
+    }
+    this.speech.set(employeeId, { lines, until: performance.now() + ms });
+    this.draw(performance.now());
   }
 
   // ---------------- scene & data ----------------
@@ -338,6 +357,7 @@ export class OfficeEngine {
       let interval = 500; // idle: 2 FPS (breathing)
       if (walking) interval = 1000 / 30;
       else if (this.anyVisible((c) => ['working', 'completed'].includes(c.e.state))) interval = 100;
+      else if (this.speech.size) interval = 250;
       if (t - this.lastDraw >= interval) {
         this.lastDraw = t;
         this.draw(t);
@@ -489,6 +509,41 @@ export class OfficeEngine {
       }
       ctx.textAlign = 'start';
     }
+    this.drawSpeech(ctx, toScreen, t);
+  }
+
+  drawSpeech(ctx, toScreen, t) {
+    if (!this.speech.size) return;
+    const fs = Math.max(10, Math.min(12, 4.6 * this.scale));
+    ctx.font = `500 ${fs}px system-ui, sans-serif`;
+    ctx.textBaseline = 'top';
+    for (const [id, sp] of this.speech) {
+      if (sp.until < t) {
+        this.speech.delete(id);
+        continue;
+      }
+      const c = this.chars.get(id);
+      if (!c || !this.isVisibleWorld(c.x, c.y)) continue;
+      const lh = fs * 1.25;
+      const w = Math.max(...sp.lines.map((l) => ctx.measureText(l).width)) + 14;
+      const hgt = sp.lines.length * lh + 10;
+      const [cx, cy] = toScreen(c.x, c.y - FH - 14);
+      const x = Math.round(Math.min(Math.max(4, cx - w / 2), this.cssW - w - 4));
+      const y = Math.round(Math.max(4, cy - hgt));
+      ctx.fillStyle = 'rgba(46,42,51,0.9)';
+      ctx.fillRect(x - 1, y - 1, w + 2, hgt + 2);
+      ctx.fillStyle = '#fffdf5';
+      ctx.fillRect(x, y, w, hgt);
+      ctx.beginPath();
+      ctx.moveTo(Math.round(cx) - 5, y + hgt);
+      ctx.lineTo(Math.round(cx) + 5, y + hgt);
+      ctx.lineTo(Math.round(cx), y + hgt + 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#1f2937';
+      sp.lines.forEach((l, i) => ctx.fillText(l, x + 7, y + 5 + i * lh));
+    }
+    ctx.textBaseline = 'middle';
   }
 
   drawChar(ctx, c, sec) {

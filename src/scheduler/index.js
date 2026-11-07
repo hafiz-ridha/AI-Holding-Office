@@ -96,6 +96,7 @@ export function runCleanup(at = Date.now()) {
     conversations: q.run('DELETE FROM conversations WHERE created_at < ?', cutoff).changes,
     telegram: q.run("DELETE FROM telegram_reports WHERE created_at < ? AND type != 'daily_report'", cutoff).changes,
     audit: q.run('DELETE FROM audit_logs WHERE created_at < ?', cutoff).changes,
+    chat: q.run('DELETE FROM chat_messages WHERE created_at < ?', cutoff).changes,
   };
   q.exec('PRAGMA optimize');
   return out;

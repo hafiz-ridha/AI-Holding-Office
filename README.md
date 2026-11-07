@@ -152,6 +152,21 @@ Menu **AI Virtual Office**:
 - Shared Services muncul di "Meja Tamu" kantor bisnis hanya saat sedang mengerjakan tugas bisnis itu.
 
 Semua animasi berasal dari status tugas di database dan antrean. Tanpa tugas, karakter diam (IDLE).
+
+### Obrolan agen
+
+Di sisi kanan kantor ada tab **Obrolan**:
+
+- **Pesan antar-agen** muncul otomatis dari kejadian tugas sungguhan, tanpa panggilan AI tambahan: penugasan, mulai kerja,
+  rapat penggabungan, selesai, laporan, gagal, dan permintaan persetujuan. Pesan terbaru juga tampil sebagai bubble di atas karakter.
+- **Pesan Anda** — pilih penerima dan mode:
+  - *Balasan cepat AI*: 1 panggilan AI; jawaban penerima masuk ke obrolan.
+  - *Tugas penuh*: Group CEO/Business Manager membagi pekerjaan.
+  - *Catatan saja*: tanpa AI.
+- Perintah cepat tanpa AI: `/status`, `/agents`, `/help`.
+- Kantor Pusat menampilkan semua obrolan. Kantor bisnis hanya menampilkan obrolan bisnis tersebut, dan staf bisnis lain
+  tidak bisa disapa dari sana.
+- Riwayat tersimpan di SQLite (tabel `chat_messages`, migrasi `003_chat.sql`) dan dibersihkan otomatis mengikuti retensi log.
 Rendering 100% di browser (Canvas 2D, tanpa WebGL/game engine):
 
 - Sprite sheet: satu PNG lokal ±3 KB (`public/assets/office-atlas.png`), dihasilkan dari kode oleh:
@@ -191,5 +206,5 @@ src/            server.js, app.js, config.js, events.js
   cli/          reset-password.js
 public/         SPA tanpa build step (HTML + CSS + ES modules + Canvas); assets/office-atlas.png (sprite sheet)
 scripts/        deploy-aapanel.sh (install/update/backup di VPS aaPanel), build-office-atlas.mjs (generator sprite sheet PNG)
-test/           node:test (65 tes) + test/system (restart, beban, RAM)
+test/           node:test (72 tes) + test/system (restart, beban, RAM)
 ```

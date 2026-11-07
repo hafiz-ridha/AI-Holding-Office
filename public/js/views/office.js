@@ -5,6 +5,7 @@ import { loadAtlas } from '../office/atlas.js';
 import { buildHQScene, buildBusinessScene, sceneKey } from '../office/scenes.js';
 import { OfficeEngine } from '../office/engine.js';
 import { avatarCanvas } from '../office/sprites.js';
+import { createChat } from './chat.js';
 
 export const STATE = {
   idle: { label: 'IDLE', text: 'Tidak ada tugas', color: '#9aa4b2' },
@@ -28,13 +29,25 @@ export async function render(root, [initial = 'hq'], ctx) {
       h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Perbesar', onclick: () => engine?.zoom(1.25) }, '+'),
       h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Perkecil', onclick: () => engine?.zoom(0.8) }, '−'),
       h('button', { class: 'btn btn-sm', type: 'button', onclick: () => engine?.fit() }, 'Pas')));
-  const panel = h('aside', { class: 'office-panel card', 'aria-live': 'polite' });
+  const panel = h('aside', { class: 'office-panel card', 'aria-live': 'polite', hidden: true });
+  const chat = createChat({ onAgentMessage: (m) => engine?.say(m.sender_employee_id, m.content) });
+  let sideTab = 'chat';
+  const tabChat = h('button', { class: 'office-tab active', type: 'button', onclick: () => showSide('chat') }, 'Obrolan');
+  const tabInfo = h('button', { class: 'office-tab', type: 'button', onclick: () => { showSide('detail'); showPanel(); } }, 'Detail');
+  function showSide(which) {
+    sideTab = which;
+    tabChat.classList.toggle('active', which === 'chat');
+    tabInfo.classList.toggle('active', which === 'detail');
+    chat.el.hidden = which !== 'chat';
+    panel.hidden = which !== 'detail';
+  }
+  const side = h('div', { class: 'office-side' }, h('div', { class: 'office-tabs' }, tabChat, tabInfo), chat.el, panel);
   const legend = h('div', { class: 'legend' }, ['idle', 'pending', 'thinking', 'working', 'meeting', 'completed', 'error'].map((k) =>
     h('span', null, h('span', { class: 'dot', style: { background: STATE[k].color } }), `${STATE[k].label}${k === 'pending' ? ' (antre)' : ''}`)), h('span', null, '· WALKING: saat status berubah'));
   const tableBody = h('tbody');
   mount(root, h('div', { class: 'stack' },
     tabs,
-    h('div', { class: 'office-layout' }, h('div', { class: 'stack-sm', style: { minWidth: 0 } }, wrap, legend), panel),
+    h('div', { class: 'office-layout' }, h('div', { class: 'stack-sm', style: { minWidth: 0 } }, wrap, legend), side),
     h('details', { class: 'card' }, h('summary', null, 'Tabel status karyawan di kantor ini'),
       h('div', { class: 'table-wrap', style: { marginTop: '10px' } }, h('table', null,
         h('thead', null, h('tr', null, h('th', null, 'Nama'), h('th', null, 'Jabatan'), h('th', null, 'Status'), h('th', null, 'Tugas'))), tableBody)))));
@@ -44,6 +57,7 @@ export async function render(root, [initial = 'hq'], ctx) {
   try {
     atlas = await loadAtlas();
   } catch (e) {
+    showSide('detail');
     mount(panel, h('p', { class: 'form-error' }, `Aset kantor gagal dimuat: ${e.message}`));
     return;
   }
@@ -52,7 +66,7 @@ export async function render(root, [initial = 'hq'], ctx) {
   let current = initial;
   let selection = null;
   const scenes = new Map(); // lazy cache: sceneId -> { key, scene }
-  engine = new OfficeEngine(canvas, { atlas, onSelect: (sel) => { selection = sel; showPanel(); } });
+  engine = new OfficeEngine(canvas, { atlas, onSelect: (sel) => { selection = sel; if (sel) showSide('detail'); showPanel(); } });
 
   function sceneFor(id) {
     const key = sceneKey(data, id);
@@ -89,6 +103,9 @@ export async function render(root, [initial = 'hq'], ctx) {
     renderTabs();
     showPanel();
     fillTable();
+    chat.setData(data);
+    const b = data.businesses.find((x) => `biz-${x.id}` === id);
+    chat.setChannel(b ? String(b.id) : 'hq', b ? `Kantor ${b.name} · hanya obrolan bisnis ini` : 'Kantor Pusat · semua obrolan (pusat & bisnis)').catch(() => {});
   }
 
   function fillTable() {
@@ -108,7 +125,8 @@ export async function render(root, [initial = 'hq'], ctx) {
     engine.setData(data);
     renderTabs();
     fillTable();
-    if (!selection) showPanel(true);
+    chat.setData(data);
+    if (!selection && sideTab === 'detail') showPanel(true);
   }
 
   // ---------------- panels ----------------
@@ -224,7 +242,8 @@ export async function render(root, [initial = 'hq'], ctx) {
   engine.start();
   ctx.poll(async () => {
     await refresh();
-    if (selection) showPanel(true);
+    await chat.poll().catch(() => {});
+    if (selection && sideTab === 'detail') showPanel(true);
   }, 2000);
   const ro = new ResizeObserver(() => engine.resize());
   ro.observe(wrap);
