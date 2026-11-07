@@ -514,6 +514,7 @@ export async function render(root, [initial = 'hq'], ctx) {
     engine.setScene(scene);
     engine.setData(data, { resting: restingSet() });
     renderTabs();
+    engine.resize(); // re-measure now that the office tabs above the canvas are rendered
     showPanel();
     fillTable();
     chat.setData(data);
@@ -688,6 +689,8 @@ export async function render(root, [initial = 'hq'], ctx) {
   refreshWeather();
   updateStatusBar();
   detectChanges();
+  // Final layout (tabs + status bar filled) -> exact canvas height. setTimeout (not rAF) also runs in a background tab.
+  setTimeout(() => engine.resize(), 0);
   engine.start();
   ctx.poll(async () => {
     await refresh();
@@ -701,6 +704,11 @@ export async function render(root, [initial = 'hq'], ctx) {
   const onWinResize = () => engine.resize();
   window.addEventListener('resize', onWinResize);
   ro.observe(wrap);
+  // The canvas height depends on what is above/below it: office tabs (filled after the first render), the status bar
+  // and the legend (they can wrap once real numbers arrive).
+  ro.observe(tabs);
+  ro.observe(statusBar);
+  ro.observe(legend);
   // Pause rendering when the tab is hidden or the canvas is scrolled out of view.
   let onScreen = true;
   const io = new IntersectionObserver(([en]) => {

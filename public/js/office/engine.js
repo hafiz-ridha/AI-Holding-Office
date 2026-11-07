@@ -898,13 +898,17 @@ export class OfficeEngine {
     const cssW = wrap.clientWidth || 640;
     const worldW = this.scene.mapW * T;
     const worldH = this.scene.mapH * T;
-    const fit = cssW / worldW;
-    const minScale = Math.max(0.5, Math.min(1, fit));
-    this.scale = this.zoomLevel ?? Math.max(fit, window.innerWidth < 700 ? 1 : fit);
-    this.scale = Math.min(4, Math.max(minScale, this.scale));
     // The page may provide the available height (e.g. to fill the space next to the chat column).
     const maxH = this.maxHeight?.() ?? Math.round(window.innerHeight * 0.72);
-    const cssH = Math.min(Math.round(worldH * this.scale), maxH);
+    const phone = window.innerWidth < 700;
+    // "Pas" (fit) shows the whole office — front yard and every room — inside the canvas (width and height).
+    // Phones keep a readable 1:1 scale and pan instead.
+    const fitAll = Math.min(cssW / worldW, maxH / worldH);
+    const minScale = Math.max(0.25, Math.min(1, fitAll));
+    this.scale = this.zoomLevel ?? (phone ? Math.max(cssW / worldW, 1) : fitAll);
+    this.scale = Math.min(4, Math.max(minScale, this.scale));
+    // Desktop: the canvas always fills the available height (aligned with the side column); the map is centred.
+    const cssH = phone ? Math.min(Math.round(worldH * this.scale), maxH) : maxH;
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.cssW = cssW;
     this.cssH = cssH;
@@ -928,7 +932,7 @@ export class OfficeEngine {
     if (!this.scene) return;
     const cx = this.cam.x + this.cssW / this.scale / 2;
     const cy = this.cam.y + this.cssH / this.scale / 2;
-    this.zoomLevel = Math.min(4, Math.max(0.5, (this.zoomLevel ?? this.scale) * factor));
+    this.zoomLevel = Math.min(4, Math.max(0.25, (this.zoomLevel ?? this.scale) * factor));
     this.resize();
     this.focusOn(cx, cy);
     this.draw(performance.now());

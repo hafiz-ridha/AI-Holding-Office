@@ -12,15 +12,25 @@ const ROLE_DESK = { marketing: 'desk_mkt', finance: 'desk_fin', group_finance: '
 const ROOM_DESK = { bm: 'desk_bm', finance: 'desk_fin', reception: 'desk_rec', research: 'desk_res', dev: 'desk_dev', hr: 'desk_hr', marketing: 'desk_mkt' };
 
 // ---------- generic layout ----------
+// Landscape map: every band is stretched to mapW and the extra width is shared by all rooms of the band in proportion
+// to their base width (rooms get roomier, nothing is squeezed). Wider rooms fit more desks per row, which keeps the
+// map low, so "Pas" (fit) can show the whole office on a landscape screen.
 function layoutBands(bands, mapW) {
   const rooms = [];
   const corridors = [];
   let y = YARD_H;
   for (const band of bands) {
+    const base = band.reduce((n, r) => n + r.w, 0);
+    const extra = Math.max(0, mapW - HALL_W - base);
     let used = HALL_W;
     band.forEach((r, i) => {
-      if (i === band.length - 1) r.w = mapW - used; // last room fills the band
+      r.w = i === band.length - 1 ? mapW - used : r.w + Math.floor((extra * r.w) / base);
       used += r.w;
+      if (r.kind === 'desks') {
+        const step = r.exec ? 72 : 56;
+        const fit = Math.max(1, Math.floor((r.w * T - 30) / step));
+        r.cols = Math.max(1, Math.min(fit, r.maxCols || 6, Math.max(r.deskCount, 1)));
+      }
       r.rows = r.kind === 'desks' ? Math.max(1, Math.ceil(r.deskCount / r.cols)) : 0;
     });
     // wall (2) + furniture strip (2) + desk rows (4 each) + floor space for props (2)
@@ -186,10 +196,14 @@ function makeDesk(x, y, room, opts = {}) {
 function placeDesks(room, ids, opts = {}) {
   const out = [];
   const step = opts.exec ? 72 : 56;
+  // The desk group is centred in the room (rooms are wider in the landscape layout); +20 keeps the idle spot free.
+  const perRow = Math.max(1, Math.min(room.cols, ids.length));
+  const blockW = (perRow - 1) * step + (opts.exec ? 48 : 32) + 20;
+  const x0 = room.x * T + Math.max(12, Math.floor((room.w * T - blockW) / 2));
   ids.forEach((id, i) => {
     const col = i % room.cols;
     const row = Math.floor(i / room.cols);
-    const x = room.x * T + 12 + col * step;
+    const x = x0 + col * step;
     const y = (room.y + 4 + row * 4) * T;
     out.push(makeDesk(x, y, room, { ...opts, owner: id, flag: opts.flagOf?.(id) || null, frame: opts.frameOf?.(id) || opts.frame }));
   });
@@ -497,7 +511,7 @@ export function buildHQScene(data, size) {
       R('lounge', 'Lounge', 16, { floor: 'parquet', kind: 'lounge', minH: 10, tint: '#5f9e54' }),
     ],
   ];
-  const base = layoutBands(bands, 46);
+  const base = layoutBands(bands, 64); // landscape: ~1024 x 752 px
   const room = (k) => base.rooms.find((r) => r.key === k);
   const frameOf = (id) => ROLE_DESK[empById.get(id)?.role_key];
   const desks = [];
@@ -530,7 +544,7 @@ export function buildBusinessScene(data, business, size) {
   const tint = business.color || '#3b82f6';
   const bands = [
     [
-      { key: 'manager', name: `Ruang Manager · ${business.name}`, w: 11, kind: 'desks', cols: 1, deskCount: 1, floor: 'carpet', tint },
+      { key: 'manager', name: `Ruang Manager · ${business.name}`, w: 11, kind: 'desks', cols: 1, deskCount: 1, exec: true, floor: 'carpet', tint },
       { key: 'workspace', name: `Area Kerja Tim · ${business.name}`, w: 27, kind: 'desks', cols: 4, deskCount: Math.max(1, staff.length + assignedShared.length), floor: 'wood', tint },
     ],
     [
@@ -539,7 +553,7 @@ export function buildBusinessScene(data, business, size) {
       { key: 'lounge', name: 'Pantry', w: 12, kind: 'lounge', minH: 10, floor: 'parquet', tint: '#5f9e54' },
     ],
   ];
-  const base = layoutBands(bands, 40);
+  const base = layoutBands(bands, 56); // landscape: ~896 x 560 px
   const room = (k) => base.rooms.find((r) => r.key === k);
   const desks = [];
   // Manager desk exists even without a manager (shown empty) so the office still reads as a business.

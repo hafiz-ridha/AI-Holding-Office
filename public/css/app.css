@@ -269,6 +269,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .office-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
 /* Office page: full window width and one screen tall; employee status is the third tab of the side column. */
 .view.view-full { max-width: none; padding-bottom: 6px; }
+/* One-line legend on the office page: a wrapping legend changed the canvas height (and toggled the scrollbar). */
+.view-full .legend { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+.view-full .legend > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; display: block; }
 .view-full .office-side .chat-list { height: calc(100vh - 470px); }
 .office-roster { display: flex; flex-direction: column; gap: 8px; padding: 12px; min-width: 0; }
 .office-roster h3 { margin: 0; font-size: 15px; }
