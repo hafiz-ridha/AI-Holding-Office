@@ -8,7 +8,7 @@ Semua pengujian AI memakai server **mock** OpenAI-compatible & Telegram lokal (`
 Integrasi dengan API key asli (OpenRouter, Groq, Gemini, 9Router, Telegram) **belum diuji** karena tidak ada
 kredensial; dashboard menyediakan *Test connection* untuk memverifikasinya setelah key diisi.
 
-## 1. Tes otomatis: `npm test` → 72/72 lulus
+## 1. Tes otomatis: `npm test` → 77/77 lulus
 
 | File | Cakupan |
 |---|---|
@@ -20,6 +20,7 @@ kredensial; dashboard menyediakan *Test connection* untuk memverifikasinya setel
 | `06-migration` (2) | DB v1 berisi data → migrasi holding: backup `pre-migrate` otomatis, data lama utuh, prompt kustom tidak berubah; backup/restore `integrity_check ok` + FTS |
 | `07-provider-catalog` (6) | 18 preset valid, placeholder Account ID Cloudflare, default rate limit preset, provider tanpa key, provider tanpa `/models` (ping chat 1×, saran model preset) |
 | `09-chat` (7) | obrolan agen dari event nyata (penugasan/rapat/selesai/laporan), urutan pesan owner → mulai → balasan, mode catatan & slash command tanpa AI, isolasi saluran per bisnis, staf bisnis lain ditolak, hapus riwayat per saluran |
+| `10-office-visual` (5) | lapisan visual v3: tidak ada objek bertumpuk di Kantor Pusat & kantor bisnis (holding default, 8 bisnis × 9 staf + 7 shared, holding hampir kosong), setiap ruangan punya wallpaper/papan nama/pintu, kursi lounge punya lorong bebas, meja deterministik per karyawan, semua frame sprite tersedia |
 | `08-office` (8) | state kantor dari data nyata: idle saat tidak ada pekerjaan, THINKING→WORKING→MEETING→COMPLETED, meeting HQ vs bisnis, Shared Services "visiting", ERROR dari tugas gagal/tertunda, panel karyawan (token, model, hasil), panel koordinasi terisolasi per bisnis, bisnis baru tampil otomatis, sprite sheet PNG valid |
 
 ## 2. Uji sistem: `npm run test:system`
@@ -50,14 +51,16 @@ di compose hanya pengaman.
 
 | Metrik | Hasil |
 |---|---|
-| Ukuran aset sprite sheet | 3,3 KB PNG (59 frame) + 2,5 KB JSON |
-| Bangun scene Kantor Pusat / kantor bisnis | 22 ms / 14,5 ms (sekali, saat dibuka) |
-| Waktu render 1 frame, semua karakter bekerja (kasus terburuk) | 0,33 ms |
-| JS heap halaman | ±3 MB |
+| Ukuran aset sprite sheet (v3) | 9,8 KB PNG (165 frame) + JSON |
+| Bangun scene Kantor Pusat / kantor bisnis (v3, dengan furnishing + cek tabrakan) | 11,5 ms / 7 ms (sekali, saat dibuka) |
+| Pre-render latar + pencahayaan per kantor | 25 ms (sekali per kantor/periode hari) |
+| Waktu render 1 frame, semua karakter bekerja (kasus terburuk), tampilan pas layar / zoom 2× | 0,63 ms / 0,30 ms |
+| JS heap halaman | ±4,5 MB |
 | FPS | 30 saat berjalan, ±10 saat mengetik/selebrasi, 2 saat diam, 0 saat tab tersembunyi/kanvas tidak terlihat |
 
 Rendering terjadi di browser; server hanya melayani `GET /api/office` (JSON) setiap 2 detik selama halaman kantor
-terbuka, sehingga RAM server tidak bertambah karena visualisasi.
+terbuka (+ `/api/overview` tiap 10 detik untuk status bar, + riwayat tugas tiap 60 detik untuk RESTING), sehingga RAM
+server tidak bertambah karena visualisasi.
 
 ## 5. Uji manual di browser (dashboard)
 
@@ -66,6 +69,11 @@ terbuka, sehingga RAM server tidak bertambah karena visualisasi.
 - Urutan state nyata saat business task berjalan: Business Manager THINKING → IDLE (menunggu tim) → MEETING
   (memimpin) → COMPLETED; staf IDLE → WORKING → MEETING → COMPLETED.
 - Tampilan mobile 375×812: kanvas bisa digeser, tab kantor bisa digulir, panel di bawah kanvas.
+- v3 (dengan mock provider lokal, jeda 6 detik): karyawan RESTING di Lounge berjalan lewat lorong ke meja saat diberi
+  tugas → WORKING (monitor menyala, ikon gear, badge ruangan) → COMPLETED (notifikasi) → IDLE di meja; tugas yang
+  tertunda karena provider mati tampil ERROR + notifikasi "tertunda". Tooltip, panel karyawan melayang, 16 panel ruangan,
+  minimap, tombol suara, status bar, dan 4 periode pencahayaan dicek di browser; tablet 768×1024 dan ponsel 375×812
+  (panel karyawan menjadi bottom sheet ±55% tinggi kanvas, minimap disembunyikan default).
 
 ## 6. Belum diuji / butuh konfigurasi Anda
 

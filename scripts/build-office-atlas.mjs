@@ -22,6 +22,8 @@ class Raster {
     this.d = Buffer.alloc(w * h * 4);
   }
   px(x, y, c) {
+    x = Math.floor(x);
+    y = Math.floor(y);
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
     const [r, g, b, a] = hex(c);
     const i = (y * this.w + x) * 4;
@@ -305,9 +307,370 @@ def('sparkle_0', 8, 8, (g) => { g.r(3, 0, 2, 8, P.yellow); g.r(0, 3, 8, 2, P.yel
 def('sparkle_1', 8, 8, (g) => { g.px(1, 1, P.yellow); g.px(6, 1, P.yellow); g.px(1, 6, P.yellow); g.px(6, 6, P.yellow); g.r(3, 2, 2, 4, P.yellow); g.r(2, 3, 4, 2, P.yellow); });
 def('flag_pole', 6, 16, (g) => { g.r(0, 0, 2, 16, P.metalD); g.r(0, 15, 4, 1, P.metalDD); });
 
+// =====================================================================================
+// v2: richer office set (room identity, wall styles, rugs, boards, screens, ambient frames)
+// Later definitions with the same name replace the v1 sprite (desk, exec_desk, chair, …).
+// =====================================================================================
+
+// tiny 3x5 pixel font for signs
+const FONT = {
+  A: ['010', '101', '111', '101', '101'], C: ['011', '100', '100', '100', '011'], E: ['111', '100', '110', '100', '111'],
+  K: ['101', '110', '100', '110', '101'], L: ['100', '100', '100', '100', '111'], M: ['101', '111', '111', '101', '101'],
+  O: ['010', '101', '101', '101', '010'], P: ['110', '101', '110', '100', '100'], I: ['111', '010', '010', '010', '111'],
+  W: ['101', '101', '111', '111', '101'], S: ['011', '100', '010', '001', '110'], N: ['101', '111', '111', '111', '101'],
+};
+function text(g, s, x, y, c) {
+  let cx = x;
+  for (const ch of s) {
+    const glyph = FONT[ch];
+    if (glyph) glyph.forEach((row, j) => [...row].forEach((b, i) => b === '1' && g.px(cx + i, y + j, c)));
+    cx += 4;
+  }
+}
+
+// ---- wall styles: wallpaper per room identity ----
+const WALLS = {
+  cream: ['#efe6d8', '#ddd1bf', null],
+  sage: ['#dfe8d6', '#c8d6bc', 'stripe'],
+  sky: ['#dde8f0', '#c5d5e2', 'dots'],
+  rose: ['#f1e0dc', '#e0c8c2', 'stripe'],
+  slate: ['#cfd5dd', '#b7bfca', 'grid'],
+  wood: ['#c99a6c', '#b4865a', 'panel'],
+  lav: ['#e6e0f0', '#d1c8e3', 'dots'],
+  peach: ['#f5e2cf', '#e7cdb2', 'stripe'],
+};
+function wallBase(g, face, faceD, pattern) {
+  g.r(0, 0, 16, 6, P.wallCap); g.r(0, 0, 16, 1, P.wallCapL); g.r(0, 5, 16, 1, '#4e3d31');
+  g.r(0, 6, 16, 23, face); g.r(0, 6, 16, 2, faceD);
+  if (pattern === 'stripe') for (let x = 2; x < 16; x += 5) g.r(x, 8, 1, 14, faceD);
+  if (pattern === 'dots') for (let y = 10; y < 22; y += 5) for (let x = (y % 2) + 2; x < 16; x += 6) g.px(x, y, faceD);
+  if (pattern === 'grid') { for (let x = 0; x < 16; x += 8) g.r(x, 8, 1, 14, faceD); g.r(0, 15, 16, 1, faceD); }
+  if (pattern === 'panel') { g.r(0, 8, 16, 1, '#a87a50'); g.r(7, 8, 1, 14, '#a87a50'); g.r(15, 8, 1, 14, '#a87a50'); g.r(1, 9, 5, 1, '#d8ab7d'); }
+  g.r(0, 22, 16, 1, '#b8987a'); // chair rail
+  g.r(0, 23, 16, 6, faceD);
+  g.r(0, 29, 16, 3, P.base); g.r(0, 29, 16, 1, '#b8987a');
+}
+for (const [name, [face, faceD, pattern]] of Object.entries(WALLS)) {
+  def(`wall_${name}`, 16, 32, (g) => wallBase(g, face, faceD, pattern));
+  def(`wallwin_${name}`, 16, 32, (g) => {
+    wallBase(g, face, faceD, pattern);
+    g.box(2, 8, 12, 14, P.glass, P.woodD); g.r(3, 9, 4, 5, P.glassL); g.r(7, 9, 1, 12, P.woodD); g.r(3, 15, 10, 1, P.woodD);
+    g.r(1, 7, 14, 1, '#7a5b46'); g.r(1, 7, 3, 9, '#c86f6f'); g.r(12, 7, 3, 9, '#c86f6f'); g.r(2, 8, 1, 7, '#e09191'); g.r(13, 8, 1, 7, '#e09191');
+    g.r(1, 22, 14, 2, P.woodL); g.r(1, 23, 14, 1, P.woodD);
+  });
+}
+
+// ---- floors ----
+def('floor_parquet', 16, 16, (g) => {
+  for (let y = 0; y < 16; y += 4) {
+    const off = (y / 4) % 2 ? 4 : 0;
+    for (let x = -8; x < 16; x += 8) {
+      g.r(x + off, y, 8, 4, ((x + 8) / 8 + y / 4) % 2 ? '#cfa77a' : '#c49b6e');
+      g.r(x + off, y, 1, 4, '#b08458');
+    }
+  }
+  for (let y = 3; y < 16; y += 4) g.r(0, y, 16, 1, '#b08458');
+  g.r(3, 1, 2, 1, '#dcb88c'); g.r(11, 9, 2, 1, '#dcb88c');
+});
+def('floor_dark', 16, 16, (g) => {
+  g.r(0, 0, 16, 16, '#5b6270'); g.r(0, 0, 8, 8, '#555c69'); g.r(8, 8, 8, 8, '#555c69');
+  g.r(0, 15, 16, 1, '#474d58'); g.r(15, 0, 1, 16, '#474d58'); g.px(4, 4, '#6a7180'); g.px(12, 12, '#6a7180');
+});
+def('floor_warm', 16, 16, (g) => {
+  g.r(0, 0, 16, 16, '#ead8bd'); g.r(0, 0, 8, 8, '#e2cdb0'); g.r(8, 8, 8, 8, '#e2cdb0'); g.r(0, 15, 16, 1, '#d2bb9a'); g.r(15, 0, 1, 16, '#d2bb9a');
+});
+
+// ---- rugs (9-slice 8x8, three colorways) ----
+const RUGS = { red: ['#b5574a', '#8f3f36', '#e6c36a'], blue: ['#4f6f9e', '#3b557c', '#e6d7a3'], green: ['#5e8f5a', '#466d43', '#efe1b0'] };
+for (const [c, [base, dark, trim]] of Object.entries(RUGS)) {
+  const piece = (k, top, left, right, bottom) => def(`rug_${c}_${k}`, 8, 8, (g) => {
+    g.r(0, 0, 8, 8, base);
+    for (let i = 0; i < 8; i += 4) g.px(i + 2, 3, dark), g.px(i, 6, dark);
+    if (top) { g.r(0, 0, 8, 2, dark); g.r(0, 1, 8, 1, trim); }
+    if (bottom) { g.r(0, 6, 8, 2, dark); g.r(0, 6, 8, 1, trim); }
+    if (left) { g.r(0, 0, 2, 8, dark); g.r(1, 0, 1, 8, trim); }
+    if (right) { g.r(6, 0, 2, 8, dark); g.r(6, 0, 1, 8, trim); }
+    if (!top && !bottom && !left && !right) { g.px(3, 3, trim); g.px(4, 4, trim); g.px(3, 4, dark); g.px(4, 3, dark); }
+  });
+  piece('tl', 1, 1, 0, 0); piece('t', 1, 0, 0, 0); piece('tr', 1, 0, 1, 0);
+  piece('l', 0, 1, 0, 0); piece('c', 0, 0, 0, 0); piece('r', 0, 0, 1, 0);
+  piece('bl', 0, 1, 0, 1); piece('b', 0, 0, 0, 1); piece('br', 0, 0, 1, 1);
+}
+
+// ---- desks with room-specific items (same footprint as v1: positions unchanged) ----
+function deskBase(g) {
+  g.r(1, 18, 30, 2, '#00000022');
+  g.box(0, 2, 32, 12, P.wood, P.ol);
+  g.r(1, 3, 30, 3, P.woodL); g.r(2, 7, 28, 1, '#a46f45');
+  g.r(1, 13, 30, 4, P.woodD); g.r(0, 13, 32, 1, P.ol); g.r(0, 17, 32, 1, P.ol);
+  g.r(14, 14, 4, 1, '#c8a27a');
+  g.r(1, 17, 3, 3, P.woodDD); g.r(28, 17, 3, 3, P.woodDD);
+}
+const kb = (g, x = 10) => { g.r(x, 9, 12, 3, '#d8dbe0'); g.r(x, 9, 12, 1, '#c3c7ce'); for (let i = 1; i < 11; i += 2) g.px(x + i, 10, '#aeb3bb'); };
+const mug = (g, x, y, c = P.white) => { g.r(x, y, 4, 4, c); g.r(x, y, 4, 1, '#00000022'); g.px(x + 4, y + 1, c); };
+const papers = (g, x, y) => { g.r(x, y, 6, 5, P.paper); g.r(x + 1, y + 1, 4, 1, '#c8c2b4'); g.r(x + 1, y + 3, 3, 1, '#c8c2b4'); };
+def('desk', 32, 20, (g) => { deskBase(g); kb(g); mug(g, 25, 6); papers(g, 3, 6); });
+def('desk_bm', 32, 20, (g) => { deskBase(g); kb(g); g.box(25, 5, 5, 5, '#f4e3b5', P.woodDD); g.r(26, 6, 3, 2, '#7fb3d5'); g.r(2, 6, 4, 4, P.pot); g.r(2, 4, 4, 3, P.greenL); papers(g, 7, 7); });
+def('desk_fin', 32, 20, (g) => { deskBase(g); kb(g); g.box(24, 5, 6, 7, '#3d434e', P.ol); g.r(25, 6, 4, 2, '#9fe0a8'); g.px(25, 9, P.white); g.px(27, 9, P.white); g.px(25, 10, P.white); g.px(27, 10, P.white); papers(g, 2, 5); papers(g, 3, 7); });
+def('desk_rec', 32, 20, (g) => { deskBase(g); kb(g); g.r(24, 6, 6, 4, '#3d434e'); g.r(24, 5, 3, 2, '#3d434e'); g.px(28, 7, P.red); g.r(2, 6, 6, 5, '#f7f2e6'); g.r(2, 6, 6, 1, P.red); g.px(4, 8, '#7a8396'); g.px(6, 9, '#7a8396'); });
+def('desk_res', 32, 20, (g) => { deskBase(g); kb(g); g.r(23, 5, 8, 6, P.paper); g.r(26, 5, 1, 6, '#c8c2b4'); g.r(24, 6, 2, 1, '#99aaaa'); g.r(28, 7, 2, 1, '#99aaaa'); g.r(2, 5, 5, 2, P.blue); g.r(2, 7, 5, 2, P.red); g.r(2, 9, 5, 2, P.green); });
+def('desk_dev', 32, 20, (g) => { deskBase(g); kb(g); mug(g, 26, 6, '#2b2f37'); g.r(2, 6, 5, 3, '#2b2f37'); g.px(3, 7, P.greenL); g.px(5, 7, P.greenL); });
+def('desk_hr', 32, 20, (g) => { deskBase(g); kb(g); g.r(23, 4, 7, 3, P.yellow); g.r(23, 7, 7, 3, P.blue); g.r(23, 10, 7, 2, P.red); papers(g, 2, 6); });
+def('desk_mkt', 32, 20, (g) => { deskBase(g); kb(g); g.box(23, 5, 8, 6, '#2b2f37', P.ol); g.r(24, 6, 6, 4, '#ffd6a5'); g.r(2, 5, 3, 6, '#e07a2f'); g.r(3, 4, 1, 2, P.red); g.r(5, 6, 2, 5, P.blue); g.r(5, 5, 1, 2, P.yellow); });
+def('exec_desk', 48, 22, (g) => {
+  g.r(1, 20, 46, 2, '#00000022');
+  g.box(0, 2, 48, 14, P.woodDD, P.ol);
+  g.r(1, 3, 46, 4, '#7c4f2f'); g.r(2, 4, 44, 1, '#9a6a44'); g.r(2, 9, 44, 1, '#6b4428');
+  g.r(1, 15, 46, 5, '#5a381f'); g.r(0, 15, 48, 1, P.ol); g.r(0, 20, 48, 1, P.ol);
+  g.r(6, 16, 10, 3, '#6b4428'); g.r(32, 16, 10, 3, '#6b4428'); g.px(11, 17, P.gold); g.px(37, 17, P.gold);
+  kb(g, 18);
+  g.r(3, 7, 7, 6, P.paper); g.r(4, 6, 7, 6, '#f7f2e6'); g.r(5, 8, 4, 1, '#c8c2b4'); // documents
+  g.r(12, 8, 4, 4, '#2b2f37'); g.r(13, 6, 1, 2, P.gold); g.r(14, 6, 1, 3, P.red); // pen holder
+  g.r(32, 10, 12, 3, P.gold); g.r(33, 11, 10, 1, '#7c5a12'); // nameplate
+  g.r(40, 4, 4, 4, '#3a3f4b'); g.r(41, 3, 2, 2, '#f3d58a'); // desk lamp
+});
+def('exec_chair', 14, 16, (g) => {
+  g.box(1, 0, 12, 9, '#5a2f22', P.ol); g.r(2, 1, 10, 2, '#7a4434');
+  g.box(0, 7, 14, 8, '#4a261b', P.ol); g.r(2, 8, 10, 1, '#6b3a2b'); g.r(6, 15, 2, 1, P.metalDD);
+});
+def('chair', 14, 14, (g) => {
+  g.r(1, 12, 12, 2, '#00000022');
+  g.box(1, 0, 12, 9, '#4f5a6e', P.ol); g.r(2, 1, 10, 2, '#66718a');
+  g.box(0, 8, 14, 5, '#3d4656', P.ol); g.r(2, 9, 10, 1, '#55607a');
+  g.r(6, 13, 2, 1, P.metalDD);
+});
+def('chair_visit', 12, 12, (g) => { g.box(0, 0, 12, 5, '#8a5a37', P.ol); g.box(1, 4, 10, 7, '#c9844f', P.ol); g.r(2, 5, 8, 1, '#e0a06a'); });
+for (const [k, c] of [['term_0', ['#7CFC9A', '#3ad06a']], ['term_1', ['#3ad06a', '#7CFC9A']]]) {
+  def(`monitor_${k}`, 14, 11, (g) => {
+    g.box(0, 0, 14, 9, '#0f1a14', P.ol);
+    g.r(2, 2, 7, 1, c[0]); g.r(2, 4, 9, 1, c[1]); g.r(2, 6, 5, 1, c[0]); g.r(8, 6, 2, 1, P.white);
+    g.r(6, 9, 2, 1, P.metalDD); g.r(4, 10, 6, 1, P.metalDD);
+  });
+}
+
+// ---- wall boards & screens ----
+function board(name, w, h, frame, bg, content) {
+  def(name, w, h, (g) => { g.box(0, 0, w, h, bg, frame); g.r(1, 1, w - 2, 1, '#ffffff55'); content(g); });
+}
+function screenProp(name, w, h, content) {
+  def(name, w, h, (g) => { g.box(0, 0, w, h - 2, '#1e2a3a', '#20242b'); g.r(1, 1, w - 2, 1, '#2f4a6b'); content(g); g.r(w / 2 - 2, h - 2, 4, 2, P.metalDD); });
+}
+board('kpi_board', 40, 24, P.woodD, '#fbf7ee', (g) => {
+  g.r(3, 3, 14, 1, P.ol); [[4, 6], [7, 9], [10, 5], [13, 11]].forEach(([x, hh]) => g.r(x, 20 - hh, 2, hh, x % 2 ? P.green : P.blue));
+  g.r(3, 20, 15, 1, '#7a8396');
+  for (let i = 0; i < 16; i++) g.px(21 + i, 16 - Math.round(i * 0.6 + (i % 3)), P.red);
+  g.r(21, 4, 6, 2, P.green); g.r(29, 4, 7, 2, P.gold);
+});
+board('agenda_board', 32, 24, P.metalD, P.white, (g) => {
+  g.r(3, 3, 12, 1, P.ol);
+  for (let i = 0; i < 4; i++) { g.r(3, 7 + i * 4, 2, 2, i < 2 ? P.green : '#c8ccd4'); g.r(7, 7 + i * 4, 10 + (i % 3) * 4, 1, '#7a8396'); }
+  g.r(25, 3, 4, 4, P.red);
+});
+def('present_screen', 48, 26, (g) => {
+  g.r(0, 0, 48, 3, '#3a3f4b'); g.r(2, 3, 44, 20, '#f7f7f3'); g.r(2, 22, 44, 1, '#c8ccd4');
+  g.r(6, 6, 16, 2, P.blue); g.r(6, 10, 22, 1, '#7a8396'); g.r(6, 13, 18, 1, '#7a8396');
+  [[30, 6], [34, 9], [38, 4]].forEach(([x, hh]) => g.r(x, 19 - hh, 3, hh, P.teal));
+  g.r(23, 23, 2, 3, '#3a3f4b');
+});
+def('projector', 14, 8, (g) => { g.box(0, 1, 14, 7, '#e2e2e2', P.ol); g.r(9, 2, 4, 4, '#2b2f37'); g.r(10, 3, 2, 2, '#9fd0ea'); g.px(3, 3, P.greenL); });
+def('laptop', 10, 7, (g) => { g.box(0, 0, 10, 5, '#2b2f37', P.ol); g.r(1, 1, 8, 3, '#5ab8f0'); g.r(0, 5, 10, 2, '#9aa2ae'); });
+def('water_bottle', 3, 6, (g) => { g.r(0, 1, 3, 5, '#bfe6f7'); g.r(1, 0, 1, 1, P.blue); });
+board('perf_board', 40, 24, P.woodD, '#fbf7ee', (g) => {
+  g.r(3, 3, 16, 1, P.ol);
+  [[P.green, 12], ['#92400e', 9], [P.blue, 14], [P.purple, 6]].forEach(([c, hh], i) => g.r(5 + i * 8, 20 - hh, 5, hh, c));
+  g.r(3, 20, 34, 1, '#7a8396');
+});
+board('finance_board', 32, 24, P.woodD, '#fbf7ee', (g) => {
+  for (let y = 0; y < 12; y++) for (let x = 0; x < 12; x++) {
+    const dx = x - 5.5, dy = y - 5.5;
+    if (dx * dx + dy * dy < 30) g.px(4 + x, 6 + y, Math.atan2(dy, dx) > 1 ? P.gold : Math.atan2(dy, dx) > -1 ? P.green : P.blue);
+  }
+  g.r(19, 6, 9, 1, P.ol); g.r(19, 9, 7, 1, '#7a8396'); g.r(19, 12, 8, 1, '#7a8396'); g.r(19, 15, 6, 1, P.green);
+});
+screenProp('dash_screen', 32, 22, (g) => {
+  g.r(3, 3, 8, 6, '#24364d'); g.r(4, 4, 6, 1, P.greenL); g.r(4, 6, 4, 1, P.white);
+  for (let i = 0; i < 16; i++) g.px(13 + i, 12 - Math.round(Math.sin(i / 2) * 3 + i * 0.25), '#ffd166');
+  [[4, 4], [8, 7], [12, 5], [16, 9], [20, 6]].forEach(([x, hh]) => g.r(x + 2, 18 - hh, 2, hh, P.screenOn));
+});
+board('calendar_board', 24, 22, P.red, P.white, (g) => {
+  g.r(1, 1, 22, 4, P.red); g.px(6, 0, P.metalD); g.px(17, 0, P.metalD);
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 5; x++) g.r(3 + x * 4, 7 + y * 3, 2, 2, (x + y) % 4 === 0 ? P.yellow : '#c8ccd4');
+});
+def('welcome_sign', 36, 11, (g) => { g.box(0, 0, 36, 11, '#3f6f5a', '#2b4d3e'); g.r(1, 1, 34, 1, '#5d9178'); text(g, 'WELCOME', 4, 3, '#f7f2e6'); });
+def('doc_shelf', 32, 30, (g) => {
+  g.r(1, 28, 30, 2, '#00000022');
+  g.box(0, 0, 32, 28, P.woodD, P.ol);
+  const bc = [P.blue, P.red, P.yellow, P.green, P.teal, P.purple];
+  for (let s = 0; s < 3; s++) {
+    const y = 2 + s * 9;
+    g.r(2, y, 28, 7, P.woodDD);
+    for (let i = 0; i < 6; i++) { g.r(3 + i * 4.5, y + 1, 3, 6, bc[(i + s) % 6]); g.px(4 + i * 4.5, y + 3, P.white); }
+    g.r(1, y + 7, 30, 1, P.woodL);
+  }
+});
+def('bookshelf_tall', 32, 40, (g) => {
+  g.r(1, 38, 30, 2, '#00000022');
+  g.box(0, 0, 32, 38, '#6b4428', P.ol); g.r(1, 1, 30, 2, '#8a5a37');
+  const colors = [P.red, P.blue, P.yellow, P.green, P.purple, P.teal, '#c27c4a', P.white, '#7a4434'];
+  for (let s = 0; s < 4; s++) {
+    const y = 4 + s * 8.5;
+    g.r(2, y, 28, 7, '#4a2d18');
+    let x = 3, k = s * 5;
+    while (x < 28) {
+      const w = 2 + ((k * 7) % 3 === 0 ? 1 : 0);
+      const hh = 5 + (k % 3 === 0 ? 1 : 0);
+      if (k % 7 === 4) { g.r(x, y + 7 - 3, 4, 3, colors[k % 9]); x += 5; } // lying book
+      else { g.r(x, y + 7 - hh, w, hh, colors[k % 9]); g.px(x, y + 7 - hh + 1, '#ffffff55'); x += w; }
+      k++;
+    }
+    g.r(1, y + 7, 30, 1, '#9a6a44');
+  }
+});
+def('research_table', 40, 22, (g) => {
+  g.r(1, 20, 38, 2, '#00000022');
+  g.box(0, 0, 40, 14, P.woodL, P.ol); g.r(1, 1, 38, 2, '#dcae80'); g.r(0, 13, 40, 5, P.woodD); g.r(0, 18, 40, 1, P.ol);
+  g.r(2, 18, 3, 4, P.woodDD); g.r(35, 18, 3, 4, P.woodDD);
+  g.r(4, 4, 12, 7, P.paper); g.r(10, 4, 1, 7, '#c8c2b4'); g.r(5, 6, 4, 1, '#9aa2ae'); g.r(12, 7, 3, 1, '#9aa2ae'); // open book
+  g.r(20, 3, 6, 3, P.blue); g.r(20, 6, 6, 3, P.red); g.r(21, 9, 5, 2, P.green); // stack
+  g.r(30, 5, 6, 6, '#e8e2d0'); g.r(31, 6, 3, 1, '#9aa2ae'); g.r(31, 8, 4, 1, '#9aa2ae'); // notes
+});
+board('research_board', 32, 24, '#8a5a37', '#c89b6a', (g) => {
+  g.r(3, 3, 7, 6, P.paper); g.r(13, 4, 7, 5, '#fff2b8'); g.r(23, 3, 6, 7, '#cfe7ff'); g.r(6, 13, 8, 7, P.white); g.r(19, 14, 9, 6, '#ffd6d6');
+  for (let i = 0; i < 10; i++) g.px(9 + i, 9 + Math.round(i * 0.5), P.red);
+  for (let i = 0; i < 8; i++) g.px(22 - i, 10 + Math.round(i * 0.5), P.red);
+  for (const [x, y] of [[6, 3], [16, 4], [25, 3], [9, 13], [23, 14]]) g.px(x, y, P.red);
+});
+def('book_stack', 12, 10, (g) => { g.r(0, 6, 12, 4, P.blue); g.r(1, 3, 10, 3, P.red); g.r(2, 0, 8, 3, P.green); g.r(1, 7, 10, 1, '#ffffff66'); });
+board('network_board', 40, 24, P.metalD, P.white, (g) => {
+  const nodes = [[8, 6], [20, 5], [32, 7], [12, 16], [27, 17]];
+  const line = (a, b) => { for (let t = 0; t <= 1; t += 0.05) g.px(Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), '#7a8396'); };
+  line(nodes[0], nodes[1]); line(nodes[1], nodes[2]); line(nodes[1], nodes[3]); line(nodes[1], nodes[4]); line(nodes[3], nodes[4]);
+  nodes.forEach(([x, y], i) => { g.r(x - 2, y - 2, 4, 4, i === 1 ? P.blue : P.teal); g.px(x - 1, y - 1, P.white); });
+});
+def('status_panel', 16, 12, (g) => { g.box(0, 0, 16, 12, '#2b2f37', P.ol); for (let i = 0; i < 4; i++) { g.r(2 + i * 3, 3, 2, 2, '#1f2329'); g.r(2 + i * 3, 7, 2, 2, '#1f2329'); } });
+def('cabinet_tall', 16, 30, (g) => {
+  g.r(1, 28, 14, 2, '#00000022');
+  g.box(0, 0, 16, 28, '#7d8796', P.ol); g.r(1, 1, 14, 2, '#a3abb9');
+  for (const y of [4, 12, 20]) { g.r(2, y, 12, 6, P.metalD); g.r(4, y + 1, 8, 2, P.paper); g.r(6, y + 4, 4, 1, '#c9ced6'); }
+});
+board('recruit_board', 32, 24, '#8a5a37', '#c89b6a', (g) => {
+  for (let i = 0; i < 3; i++) { const x = 3 + i * 10; g.r(x, 4, 8, 11, P.white); g.r(x + 2, 5, 4, 3, '#e0ac69'); g.r(x + 1, 9, 6, 1, '#9aa2ae'); g.r(x + 1, 11, 5, 1, '#9aa2ae'); g.px(x + 4, 4, P.red); }
+  g.r(3, 18, 12, 2, P.green); g.r(17, 18, 8, 2, P.yellow);
+});
+board('hr_board', 32, 24, P.woodD, '#fbf7ee', (g) => {
+  for (let r = 0; r < 4; r++) { g.r(3, 4 + r * 4, 8, 2, '#7a8396'); for (let s = 0; s < 5; s++) g.r(14 + s * 3, 4 + r * 4, 2, 2, s < 4 - (r % 3) ? P.gold : '#d6d0c2'); }
+});
+def('side_table', 20, 14, (g) => { g.r(1, 12, 18, 2, '#00000022'); g.box(0, 0, 20, 10, P.woodL, P.ol); g.r(1, 1, 18, 2, '#dcae80'); g.r(0, 9, 20, 3, P.woodD); g.r(6, 3, 6, 4, P.paper); g.r(14, 3, 3, 3, P.white); });
+def('binder_shelf', 24, 24, (g) => {
+  g.r(1, 22, 22, 2, '#00000022');
+  g.box(0, 0, 24, 22, P.woodD, P.ol);
+  for (let s = 0; s < 2; s++) { const y = 2 + s * 10; g.r(2, y, 20, 8, P.woodDD); for (let i = 0; i < 5; i++) { g.r(3 + i * 4, y + 1, 3, 7, [P.blue, P.red, P.green, P.yellow, P.teal][(i + s) % 5]); g.r(3 + i * 4, y + 4, 3, 1, P.white); } g.r(1, y + 8, 22, 1, P.woodL); }
+});
+board('campaign_board', 40, 24, '#2b2f37', '#ffe8cc', (g) => {
+  g.r(3, 3, 16, 18, '#e07a2f'); g.r(5, 5, 12, 8, '#ffd166'); g.r(6, 15, 10, 1, P.white); g.r(6, 17, 7, 1, P.white);
+  g.r(22, 3, 15, 8, '#5f7fb3'); g.r(24, 5, 6, 1, P.white); g.r(22, 13, 15, 8, '#b5446e'); g.r(24, 15, 9, 1, P.white);
+});
+board('moodboard', 32, 24, '#8a5a37', '#f3ead8', (g) => {
+  const sw = ['#e07a2f', '#ffd166', '#5dd39e', '#5f7fb3', '#b5446e', '#8a6fb0'];
+  sw.forEach((c, i) => g.r(3 + (i % 3) * 9, 3 + Math.floor(i / 3) * 9, 7, 7, c));
+  g.r(4, 4, 2, 1, '#ffffff88'); g.r(22, 14, 4, 3, '#ffffff88');
+});
+board('content_calendar', 32, 24, '#3a3f4b', P.white, (g) => {
+  g.r(1, 1, 30, 4, '#5f7fb3');
+  const c = ['#e07a2f', '#5dd39e', '#b5446e', '#ffd166', null];
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 6; x++) { g.r(2 + x * 5, 7 + y * 5, 4, 4, '#eef0f3'); const k = c[(x * 3 + y) % 5]; if (k) g.r(3 + x * 5, 8 + y * 5, 2, 2, k); }
+});
+screenProp('analytics_screen', 40, 24, (g) => {
+  g.r(3, 3, 3, 3, '#ff6b8b'); g.px(2, 3, '#ff6b8b'); g.r(8, 4, 8, 1, P.white);
+  [[4, 5], [9, 9], [14, 7], [19, 12], [24, 10], [29, 15]].forEach(([x, hh]) => g.r(x, 20 - hh, 3, hh, x % 2 ? '#ff6b8b' : P.screenOn));
+  g.r(34, 4, 3, 3, P.greenL); g.r(34, 9, 3, 3, P.yellow);
+});
+def('art_cart', 16, 20, (g) => {
+  g.r(1, 18, 14, 2, '#00000022');
+  g.box(0, 6, 16, 12, '#d65a4a', P.ol); g.r(1, 11, 14, 1, '#a8443a');
+  g.r(2, 1, 2, 6, P.yellow); g.r(5, 0, 2, 7, P.blue); g.r(8, 2, 2, 5, P.green); g.r(11, 1, 3, 6, P.paper); g.px(3, 0, '#7a5b00');
+});
+def('easel', 16, 26, (g) => {
+  g.r(1, 0, 14, 16, P.white); g.box(1, 0, 14, 16, P.white, P.woodD); g.r(3, 3, 10, 5, '#9fd0ea'); g.r(3, 8, 10, 5, P.greenL); g.r(9, 4, 3, 3, P.yellow);
+  g.r(3, 16, 2, 10, P.woodD); g.r(11, 16, 2, 10, P.woodD); g.r(7, 16, 2, 8, P.woodDD); g.r(2, 16, 12, 1, P.woodD);
+});
+def('archive_shelf', 32, 28, (g) => {
+  g.r(1, 26, 30, 2, '#00000022');
+  g.box(0, 0, 32, 26, P.metal, P.ol);
+  for (let s = 0; s < 2; s++) { const y = 2 + s * 12; g.r(2, y, 28, 10, P.metalD); for (let i = 0; i < 3; i++) { g.box(3 + i * 9, y + 2, 8, 8, '#c9a271', '#8a6a44'); g.r(5 + i * 9, y + 5, 4, 2, P.paper); } }
+});
+def('copier', 20, 18, (g) => { g.r(1, 16, 18, 2, '#00000022'); g.box(0, 3, 20, 13, '#dcd8cf', P.ol); g.r(2, 0, 16, 4, '#c3bfb6'); g.r(3, 6, 10, 2, '#4b505a'); g.r(15, 6, 3, 3, '#2b2f37'); g.px(16, 7, P.greenL); g.r(2, 12, 16, 2, P.paper); });
+board('kanban_board', 40, 24, P.metalD, P.white, (g) => {
+  for (let c = 0; c < 3; c++) { g.r(2 + c * 12 + 11, 2, 1, 20, '#c8ccd4'); g.r(3 + c * 12, 3, 9, 2, ['#7a8396', P.blue, P.green][c]); }
+  const notes = [[0, 0, '#fff2b8'], [0, 1, '#ffd6d6'], [0, 2, '#cfe7ff'], [1, 0, '#fff2b8'], [1, 1, '#d9f2d0'], [2, 0, '#d9f2d0']];
+  for (const [c, r, col] of notes) g.r(4 + c * 12, 7 + r * 5, 7, 4, col);
+});
+for (const [name, c, d] of [['sofa_blue_up', P.sofaB, P.sofaBD], ['sofa_green_up', P.sofaG, P.sofaGD]]) {
+  def(name, 48, 22, (g) => {
+    g.r(4, 20, 40, 2, '#00000033');
+    g.box(5, 0, 38, 13, c, P.ol); g.r(24, 1, 1, 11, d); // seat (north side)
+    g.box(0, 0, 6, 15, d, P.ol); g.box(42, 0, 6, 15, d, P.ol);
+    g.box(0, 12, 48, 8, d, P.ol); // back (south)
+  });
+}
+def('bean_bag', 16, 14, (g) => {
+  for (let y = 0; y < 12; y++) for (let x = 0; x < 16; x++) {
+    const dx = (x - 7.5) / 8, dy = (y - 6.5) / 6;
+    const d = dx * dx + dy * dy;
+    if (d < 1) g.px(x, y, d > 0.8 ? P.ol : dy < -0.2 ? '#f0b45a' : '#d9963b');
+  }
+  g.r(2, 12, 12, 2, '#00000022');
+});
+def('bean_bag_b', 16, 14, (g) => {
+  for (let y = 0; y < 12; y++) for (let x = 0; x < 16; x++) {
+    const dx = (x - 7.5) / 8, dy = (y - 6.5) / 6;
+    const d = dx * dx + dy * dy;
+    if (d < 1) g.px(x, y, d > 0.8 ? P.ol : dy < -0.2 ? '#8fb3e0' : '#6d90c2');
+  }
+  g.r(2, 12, 12, 2, '#00000022');
+});
+def('trophy_cabinet', 24, 30, (g) => {
+  g.r(1, 28, 22, 2, '#00000022');
+  g.box(0, 0, 24, 28, P.woodD, P.ol); g.r(2, 2, 20, 22, '#cfe8f2'); g.r(3, 3, 2, 18, '#ffffffaa');
+  g.r(2, 12, 20, 1, P.woodD);
+  g.r(6, 6, 5, 4, P.gold); g.r(8, 10, 1, 1, P.gold); g.r(14, 5, 4, 5, '#c0c0c0'); g.r(15, 10, 2, 1, '#c0c0c0');
+  g.r(5, 16, 6, 5, P.gold); g.r(7, 21, 2, 2, P.woodDD); g.r(14, 17, 5, 5, '#cd7f32');
+  g.r(2, 24, 20, 3, P.woodDD);
+});
+def('plaque', 12, 10, (g) => { g.box(0, 0, 12, 10, '#6b4428', P.ol); g.r(2, 2, 8, 6, P.gold); g.r(3, 4, 6, 1, '#7c5a12'); g.r(3, 6, 4, 1, '#7c5a12'); });
+def('certificate', 14, 10, (g) => { g.box(0, 0, 14, 10, P.woodD, P.ol); g.r(1, 1, 12, 8, '#fbf7ee'); g.r(3, 3, 8, 1, '#7a8396'); g.r(3, 5, 6, 1, '#c8c2b4'); g.r(9, 6, 3, 3, P.red); });
+def('folders', 12, 9, (g) => { g.r(0, 4, 12, 5, P.yellow); g.r(1, 2, 10, 3, P.blue); g.r(0, 6, 12, 1, '#c99a2e'); g.r(2, 0, 8, 3, P.red); });
+def('clock_face', 12, 12, (g) => {
+  for (let y = 0; y < 12; y++) for (let x = 0; x < 12; x++) { const d = Math.hypot(x - 5.5, y - 5.5); if (d < 6) g.px(x, y, d > 5 ? P.woodD : P.white); }
+  g.px(5, 1, '#7a8396'); g.px(10, 5, '#7a8396'); g.px(5, 10, '#7a8396'); g.px(1, 5, '#7a8396');
+});
+// sway variants for ambient plant animation
+def('plant_small_b', 12, 14, (g) => {
+  g.r(3, 1, 8, 6, P.green); g.r(1, 3, 4, 3, P.greenD); g.r(9, 2, 3, 3, P.greenD); g.r(5, 0, 4, 2, P.greenL); g.r(4, 3, 2, 1, P.greenL);
+  g.box(2, 7, 8, 7, P.pot, P.ol); g.r(3, 8, 6, 1, '#d07d52');
+});
+def('plant_big_b', 16, 28, (g) => {
+  g.r(4, 2, 10, 14, P.green); g.r(1, 7, 5, 6, P.greenD); g.r(12, 3, 4, 7, P.greenD); g.r(6, 0, 6, 4, P.greenL);
+  g.r(7, 5, 3, 2, P.greenL); g.r(10, 9, 3, 2, P.greenL); g.r(3, 12, 4, 3, P.greenD); g.r(7, 16, 2, 3, P.woodD);
+  g.box(3, 18, 10, 10, P.pot, P.ol); g.r(4, 19, 8, 1, '#d07d52'); g.r(4, 26, 8, 1, P.potD);
+});
+// activity indicators
+def('ico_gear_0', 11, 11, (g) => {
+  g.r(1, 1, 9, 9, P.ol); g.r(2, 2, 7, 7, '#c9ced6'); g.r(4, 0, 3, 11, P.ol); g.r(0, 4, 11, 3, P.ol); g.r(5, 1, 1, 9, '#c9ced6'); g.r(1, 5, 9, 1, '#c9ced6'); g.r(4, 4, 3, 3, '#6b7280'); g.px(5, 5, P.ol);
+});
+def('ico_gear_1', 11, 11, (g) => {
+  g.r(1, 1, 9, 9, P.ol); g.r(2, 2, 7, 7, '#c9ced6');
+  for (const [x, y] of [[1, 1], [8, 1], [1, 8], [8, 8]]) g.r(x - 1, y - 1, 3, 3, P.ol), g.px(x, y, '#c9ced6');
+  g.r(4, 4, 3, 3, '#6b7280'); g.px(5, 5, P.ol);
+});
+def('ico_ai', 7, 7, (g) => { g.r(3, 0, 1, 7, '#8da4ff'); g.r(0, 3, 7, 1, '#8da4ff'); g.r(2, 2, 3, 3, '#c7d2ff'); g.px(3, 3, P.white); });
+bubble('bub_rest', '#e6f0ff', (g) => { g.r(3, 2, 4, 1, '#5b6b8c'); g.px(6, 3, '#5b6b8c'); g.px(5, 4, '#5b6b8c'); g.r(3, 5, 4, 1, '#5b6b8c'); g.r(7, 5, 2, 1, '#8a9bbf'); g.px(8, 6, '#8a9bbf'); g.r(7, 7, 2, 1, '#8a9bbf'); });
+def('doormat', 28, 6, (g) => { g.box(0, 0, 28, 6, '#8a6a50', '#5d4636'); for (let x = 2; x < 26; x += 3) g.r(x, 2, 1, 2, '#a8876a'); });
+def('sign_plank', 8, 13, (g) => { g.box(0, 0, 8, 13, '#9a6b43', '#5d3f26'); g.r(1, 1, 6, 1, '#b8885a'); g.r(1, 11, 6, 1, '#7a5233'); });
+
 // ---------------- pack (shelf packing, 2px padding) ----------------
 const PAD = 2;
-const W = 256;
+const W = 512;
 const list = Object.entries(sprites).sort((a, b) => b[1].h - a[1].h || b[1].w - a[1].w);
 let x = PAD, y = PAD, shelfH = 0;
 const frames = {};

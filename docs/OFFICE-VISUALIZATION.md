@@ -60,7 +60,7 @@ Animasi berjalan hanya berdasarkan perubahan state dari server. Tidak ada karakt
 - Latar (lantai, dinding, furnitur) dirender sekali per kantor pada resolusi logis ke offscreen canvas, lalu
   hanya area viewport yang di-blit per frame. Karakter/ikon di luar viewport tidak digambar.
 - Kantor bisnis baru dibangun saat dibuka pertama kali (lazy) dan disimpan di cache halaman.
-- Server tidak merender apa pun; beban server hanya polling JSON setiap 3 detik selama halaman kantor terbuka.
+- Server tidak merender apa pun; beban server hanya polling JSON setiap 2 detik selama halaman kantor terbuka.
 
 ## 3. File yang diubah/dibuat
 
@@ -75,3 +75,58 @@ Animasi berjalan hanya berdasarkan perubahan state dari server. Tidak ada karakt
 | `public/css/app.css` | gaya panel & toolbar kantor |
 | `src/routes/holding.js` | `/api/office` diperkaya; endpoint detail karyawan & koordinasi (tambahan, tidak mengubah respons lama) |
 | `test/08-office.test.js` | baru: mapping state ⇄ data nyata, panel, koordinasi, aset PNG valid |
+
+## 4. Visual Enhancement (v3) — hanya frontend
+
+Backend, database, task engine, logika karyawan, multi-business, integrasi AI/Telegram, dan autentikasi **tidak diubah**.
+Semua data berasal dari endpoint yang sudah ada.
+
+### Fase & hasil uji
+
+| Fase | Isi | Diuji dengan |
+|---|---|---|
+| 1. Lantai, dinding, furnitur | Wallpaper per fungsi ruangan (+ jendela bertirai di bidang dinding kosong), 7 tekstur lantai, karpet 9-slice, papan nama kayu, kusen pintu + keset, bayangan, furnitur khusus per ruangan (CEO: rak buku, lemari trofi, papan KPI; Finance: brankas, lemari arsip; Developer Lab: server rack, panel status; Research: rak buku, meja riset, globe; HR, Marketing, Lounge, dst.). Penempatan dengan cek tabrakan. | `scene.collisions()` kosong di semua kantor; tes `10-office-visual` (5 tes) |
+| 2. Karakter & animasi status | Napas + sesekali menoleh (IDLE), mengetik + monitor berkedip + ikon gear (WORKING), bubble tiga titik + ikon AI (THINKING), jalan 4 arah mengikuti grid dengan kecepatan tetap, rapat (pemimpin berdiri), lompat + centang (COMPLETED), ikon peringatan (ERROR), **RESTING** di sofa Lounge. | uji tugas nyata lewat mock provider: lounge → meja → kerja → selesai |
+| 3. Interaksi | Tooltip hover, panel karyawan melayang bergaya pixel-art, semua ruangan bisa diklik dengan panel sesuai fungsi, meja → panel pekerjaan. | 16 panel ruangan (HQ + bisnis) dirender tanpa error |
+| 4. Visualisasi tugas langsung | Status bar atas, badge jumlah karyawan aktif per ruangan, notifikasi (mulai kerja, selesai, gagal/tertunda, rapat dimulai, approval baru). | notifikasi muncul dari perubahan state nyata |
+| 5. Lingkungan & kamera | Siang/malam (pagi, siang, sore, malam; jam browser), cahaya jendela, lampu ruangan menyala malam hari, tanaman bergoyang, jam dinding sesuai waktu, LED server, panel status Developer Lab mengikuti status sistem, minimap, zoom/drag/reset/fit, suara opsional (default mati). | render 4 periode, minimap, ponsel/tablet |
+
+### RESTING (tidak ada di backend)
+
+Diturunkan di browser dari data nyata: karyawan berstatus IDLE yang tidak punya aktivitas tugas ≥ 20 menit
+(`updated_at` tugas terakhir sebagai pelaksana atau manager, dari `GET /api/tasks?limit=100` yang disegarkan tiap 60 detik,
+ditambah perubahan status yang terlihat selama halaman terbuka). Mereka duduk di kursi Lounge/Pantry sebanyak kursi yang
+tersedia; sisanya tetap berdiri di meja. Begitu ada tugas, mereka berjalan kembali lewat lorong samping area duduk.
+
+### Panel ruangan → endpoint
+
+| Ruangan | Isi | Endpoint |
+|---|---|---|
+| CEO Office | ringkasan grup, kinerja bisnis, tugas aktif, approval menunggu | `/api/overview`, `/api/businesses`, `/api/tasks?status=active&kind=top`, `/api/approvals?status=pending` |
+| Meeting Room | rapat aktif & riwayat (jadwal rapat tidak dicatat sistem, jadi tidak ditampilkan) | `/api/office/coordination` |
+| Business Managers | bisnis, status manager, kinerja, laporan terakhir | `/api/businesses`, `/api/office` |
+| Group Finance | pendapatan, pengeluaran, arus kas bersih bulan ini per bisnis, tugas keuangan | `/api/businesses/:id/finance`, `/api/tasks?employee_id=` |
+| Secretary & Reception | dokumen terbaru, jadwal laporan harian Telegram, tindak lanjut (approval, antrean) | `/api/businesses/:id/documents`, `/api/telegram`, `/api/approvals`, `/api/tasks?status=pending` |
+| Research Library | laporan, tugas riset, jumlah dokumen per bisnis, tugas berkata kunci "kompetitor" | `/api/reports`, `/api/tasks` |
+| Developer Lab | tugas pengembangan, RAM/heap/uptime, antrean, status API/provider/Telegram, error AI & tugas gagal | `/api/overview`, `/api/health`, `/api/usage`, `/api/tasks?status=failed` |
+| HR | daftar karyawan, kinerja (dari 100 tugas selesai terakhir), beban kerja (antrean), tautan rekrutmen | `/api/office`, `/api/tasks?status=completed` |
+| Marketing Hub | tim, tugas berkata kunci "kampanye", tugas marketing (kalender konten tidak ada di sistem) | `/api/tasks` |
+| Shared Services | aktivitas departemen bersama, tugas lintas bisnis | `/api/tasks?employee_id=` |
+| Lounge / Pantry | jumlah per status, karyawan yang tidak bertugas, info kantor | `/api/office` |
+| Kantor bisnis | ringkasan bisnis (ruang manager), tim & tugas aktif (area kerja), Shared Services yang berkunjung (meja tamu) | `/api/businesses/:id`, `/api/tasks?business_id=` |
+
+Panel ruangan disegarkan tiap 10 detik (bukan tiap 2 detik) karena menggabungkan beberapa endpoint; ringkasan
+`/api/overview` untuk status bar di-cache 10 detik.
+
+### File v3
+
+| File | Perubahan |
+|---|---|
+| `scripts/build-office-atlas.mjs`, `public/assets/office-atlas.*` | 165 frame (9,8 KB PNG): wallpaper ×7 gaya, lantai ×7, karpet ×3 warna, furnitur per ruangan, ikon gear/AI/rest, kilau |
+| `public/js/office/scenes.js` | furnishing per ruangan dengan cek tabrakan, papan nama, karpet, kursi Lounge + lorong, `findCollisions()` |
+| `public/js/office/engine.js` | render v2, RESTING, indikator, tooltip/hover, klik ruangan, rute grid, siang/malam, ambient, minimap, nama tanpa tumpang tindih |
+| `public/js/office/sound.js` | baru: suara WebAudio opsional (tanpa file audio) |
+| `public/js/views/office.js` | status bar, tooltip, panel melayang, notifikasi, RESTING, kontrol minimap/suara |
+| `public/js/views/officePanels.js` | baru: panel per ruangan |
+| `public/css/app.css` | gaya pixel-art (status bar, panel, tooltip, notifikasi, minimap) |
+| `test/10-office-visual.test.js` | baru: tanpa tumpang tindih (3 skenario ukuran), meja deterministik, semua frame tersedia |

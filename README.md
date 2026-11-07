@@ -25,7 +25,7 @@ Dokumentasi:
 | Isolasi data | `business_id` pada tugas, percakapan, memori, dokumen, laporan, keuangan, log; diuji otomatis terhadap kebocoran antarbisnis |
 | AI provider | 16 preset cloud gratis/kredit + 9Router + custom OpenAI-compatible; fallback, cooldown, batas request & token, model default per tingkatan |
 | Telegram | Laporan harian holding (sekali per hari, tahan restart), notifikasi tugas/error/persetujuan, perintah `/overview /companies /business <slug> /report /tasks /finance /approvals /task /pause /resume` |
-| Kantor virtual | Pixel art top-down orisinal: Kantor Pusat (CEO Office, Meeting Room, Business Managers, Finance, Secretary, Research, Developer, HR, Marketing, Lounge) + satu kantor per bisnis (otomatis dari database). State IDLE/THINKING/WORKING/WALKING/MEETING/COMPLETED/ERROR mengikuti data tugas nyata; klik karakter, meja, atau ruang rapat untuk detail |
+| Kantor virtual | Pixel art top-down orisinal: Kantor Pusat (CEO Office, Meeting Room, Business Managers, Finance, Secretary, Research, Developer, HR, Marketing, Lounge) + satu kantor per bisnis (otomatis dari database). State IDLE/THINKING/WORKING/WALKING/MEETING/COMPLETED/ERROR (+ RESTING dari riwayat tugas) mengikuti data tugas nyata; klik karakter, meja, atau ruangan untuk detail; status bar, notifikasi, siang/malam, minimap |
 | Keamanan | Login scrypt, sesi HttpOnly, CSRF, rate limit, CSP ketat, API key terenkripsi AES-256-GCM, whitelist Telegram, audit log, persetujuan owner untuk tindakan berisiko (AI tidak pernah mengeksekusi tindakan) |
 
 ## Menjalankan secara lokal
@@ -146,12 +146,23 @@ Perintah yang tersedia:
 Menu **AI Virtual Office**:
 
 - Pilih **Kantor Pusat** atau kantor bisnis mana pun lewat tab. Bisnis baru langsung muncul tanpa perubahan kode.
-- Seret untuk menggeser; tombol **+ / − / Pas** (atau Ctrl+scroll) untuk zoom.
-- Klik **karakter** untuk detail karyawan: bisnis, status, tugas aktif, riwayat, provider/model, token, hasil.
-- Klik **meja** untuk detail pekerjaan karyawan tersebut, dan klik **ruang rapat** untuk aktivitas koordinasi.
+- **Status bar** di atas kantor: tanggal/jam lokal, jumlah karyawan, yang sedang bekerja, tugas aktif, selesai hari ini,
+  jumlah bisnis, dan status sistem (normal / antrean dijeda / provider AI bermasalah). Semua angka dari backend.
+- Seret untuk menggeser; tombol **+ / − / Pas** (atau Ctrl+scroll, tombol `+` `-` `0`) untuk zoom dan reset kamera.
+  Tombol **Peta** menampilkan minimap (klik minimap untuk memindahkan kamera).
+- Arahkan kursor ke karakter untuk tooltip (nama, status, tugas aktif). Klik **karakter** untuk panel karyawan melayang:
+  departemen, bisnis, status, tugas & progres subtugas (jika ada), provider/model AI, token, aktivitas terakhir, riwayat.
+- Klik **meja** untuk detail pekerjaan karyawan tersebut. Klik **ruangan** mana pun untuk panel sesuai fungsinya
+  (CEO: ringkasan grup & approval; Finance: keuangan bulan ini; Developer Lab: RAM, uptime, provider, error; HR: karyawan
+  & beban kerja; Lounge: siapa yang sedang tidak bertugas; dst.). Panel hanya menampilkan data yang tercatat di sistem.
+- Notifikasi kecil muncul saat karyawan mulai bekerja, tugas selesai/gagal, rapat dimulai, atau ada approval baru.
 - Shared Services muncul di "Meja Tamu" kantor bisnis hanya saat sedang mengerjakan tugas bisnis itu.
+- Tombol **♪** menyalakan suara (ketikan & notifikasi). Suara selalu **mati** saat halaman dibuka dan tidak pernah autoplay.
 
-Semua animasi berasal dari status tugas di database dan antrean. Tanpa tugas, karakter diam (IDLE).
+Semua animasi berasal dari status tugas di database dan antrean. Tanpa tugas, karakter diam (IDLE). Karyawan tanpa tugas
+yang tidak beraktivitas ≥ 20 menit (dihitung dari riwayat tugas) duduk di sofa Lounge/Pantry (**RESTING**) sebanyak kursi
+yang tersedia, lalu berjalan kembali ke meja begitu mendapat tugas. Pencahayaan mengikuti jam browser (pagi, siang, sore,
+malam: lampu ruangan menyala).
 
 ### Obrolan agen
 
@@ -167,9 +178,12 @@ Di sisi kanan kantor ada tab **Obrolan**:
 - Kantor Pusat menampilkan semua obrolan. Kantor bisnis hanya menampilkan obrolan bisnis tersebut, dan staf bisnis lain
   tidak bisa disapa dari sana.
 - Riwayat tersimpan di SQLite (tabel `chat_messages`, migrasi `003_chat.sql`) dan dibersihkan otomatis mengikuti retensi log.
+
+### Rendering
+
 Rendering 100% di browser (Canvas 2D, tanpa WebGL/game engine):
 
-- Sprite sheet: satu PNG lokal ±3 KB (`public/assets/office-atlas.png`), dihasilkan dari kode oleh:
+- Sprite sheet: satu PNG lokal ±10 KB (165 frame: lantai, wallpaper per ruangan, furnitur, ikon) di `public/assets/office-atlas.png`, dihasilkan dari kode oleh:
 
   ```bash
   node scripts/build-office-atlas.mjs
@@ -177,6 +191,7 @@ Rendering 100% di browser (Canvas 2D, tanpa WebGL/game engine):
 
   File ini bisa diganti dengan pixel art Anda sendiri asalkan nama frame di `office-atlas.json` tetap sama.
 - FPS adaptif: 30 FPS saat ada karakter berjalan, ±10 FPS saat mengetik/selebrasi, 2 FPS saat diam. Rendering berhenti saat tab tersembunyi atau kanvas tidak terlihat.
+- Animasi ambient (tanaman, jam dinding, lampu server) mati otomatis jika sistem meminta *reduced motion*.
 - Kantor bisnis dibangun saat pertama kali dibuka (lazy loading).
 
 Detail desain: [docs/OFFICE-VISUALIZATION.md](docs/OFFICE-VISUALIZATION.md).
