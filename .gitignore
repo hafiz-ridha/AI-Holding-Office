@@ -1,0 +1,9 @@
+node_modules/
+data/
+data-dev/
+.env
+.env.dev
+.env.*.local
+.claude/
+*.log
+.DS_Store

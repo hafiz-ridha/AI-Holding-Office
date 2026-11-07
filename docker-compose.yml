@@ -1,0 +1,29 @@
+# AI Virtual Holding — one service. Usage: cp .env.example .env && mkdir -p data && sudo chown -R 1000:1000 data
+#                                       docker compose up -d --build
+services:
+  ai-holding:
+    build: .
+    image: ai-virtual-holding:latest
+    container_name: ai-virtual-holding
+    restart: unless-stopped
+    init: true                      # tiny init as PID 1: forwards SIGTERM, reaps zombies
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATA_DIR: /app/data
+      PORT: "3000"
+    ports:
+      # Bound to localhost only: the aaPanel Nginx reverse proxy publishes it over HTTPS.
+      - "127.0.0.1:${HOST_PORT:-3000}:3000"
+    volumes:
+      - ./data:/app/data            # SQLite DB, backups, uploaded logos (persistent)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # lets the app reach a 9Router running on the host
+    mem_limit: 256m                 # safety ceiling, not the expected usage
+    cpus: 1.0
+    stop_grace_period: 25s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"

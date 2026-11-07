@@ -1,0 +1,157 @@
+// Event-driven Telegram notifications with a serial send queue, alert throttling, and history in telegram_reports.
+import { q, now } from '../db/index.js';
+import { bus } from '../events.js';
+import { escapeHtml, truncate, splitMessage } from '../lib/text.js';
+import { getTelegramRow, getClient } from './settings.js';
+import { getEmployee } from '../agents/employees.js';
+
+const ALERT_THROTTLE_MS = 30 * 60_000;
+const lastAlert = new Map();
+const queue = [];
+let sending = false;
+let log = console;
+
+export function recordMessage({ type, chatId, status, message, error = null, reportDate = null, attempts = 1 }) {
+  const t = now();
+  const r = q.run(
+    `INSERT INTO telegram_reports(type, report_date, chat_id, status, attempts, message, error, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    type, reportDate, chatId ?? null, status, attempts, truncate(message, 4000), error ? truncate(error, 500) : null, t, t
+  );
+  return r.lastInsertRowid;
+}
+
+// Sends (splitting long text). Throws on failure.
+export async function sendText(chatId, html, client = getClient()) {
+  if (!client) throw new Error('Bot token belum diatur');
+  if (!chatId) throw new Error('Chat ID belum diatur');
+  for (const part of splitMessage(html)) {
+    try {
+      await client.sendMessage(chatId, part);
+    } catch (e) {
+      if (e.retryAfter) {
+        await new Promise((r) => setTimeout(r, Math.min(e.retryAfter, 30) * 1000));
+        await client.sendMessage(chatId, part);
+      } else if (/can't parse entities/i.test(e.message)) {
+        // Fallback: plain text if HTML formatting got broken by splitting.
+        await client.call('sendMessage', { chat_id: chatId, text: part.replace(/<[^>]+>/g, '') });
+      } else {
+        throw e;
+      }
+    }
+    if (part !== html) await new Promise((r) => setTimeout(r, 1100));
+  }
+}
+
+function enqueue(type, html) {
+  queue.push({ type, html });
+  if (!sending) drain();
+}
+
+async function drain() {
+  sending = true;
+  while (queue.length) {
+    const item = queue.shift();
+    const row = getTelegramRow();
+    const chatId = row?.chat_id;
+    try {
+      await sendText(chatId, item.html);
+      recordMessage({ type: item.type, chatId, status: 'sent', message: item.html });
+    } catch (e) {
+      recordMessage({ type: item.type, chatId, status: 'failed', message: item.html, error: e.message });
+      log.warn?.(`Telegram ${item.type} gagal: ${e.message}`);
+    }
+    await new Promise((r) => setTimeout(r, 1100)); // stay under Telegram per-chat limits
+  }
+  sending = false;
+}
+
+function ready(flag, task) {
+  const row = getTelegramRow();
+  if (!row || !row.bot_token_enc || !row.chat_id || !row[flag]) return false;
+  // Business tasks and employee subtasks are covered by the holding result; notify only if enabled.
+  if (task && (task.kind === 'subtask' || task.kind === 'business') && !row.notify_subtasks) return false;
+  return true;
+}
+
+function bizName(task) {
+  if (!task?.business_id) return '';
+  const b = q.get('SELECT name FROM businesses WHERE id = ?', task.business_id);
+  return b ? ` [${escapeHtml(b.name)}]` : '';
+}
+
+const code = (t) => `T-${String(t.id).padStart(5, '0')}`;
+const empName = (t) => {
+  const e = t.employee_id ? getEmployee(t.employee_id) : null;
+  return e ? `${e.name} (${e.role})` : '-';
+};
+
+function onStarted({ task }) {
+  if (!ready('notify_task_started', task)) return;
+  enqueue(
+    'task_started',
+    `▶️ <b>Tugas dimulai</b>${bizName(task)}\n<b>${code(task)}</b> ${escapeHtml(task.title)}\nPenanggung jawab: ${escapeHtml(empName(task))}`
+  );
+}
+
+function onCompleted({ task }) {
+  if (!ready('notify_task_completed', task)) return;
+  const summary = truncate(String(task.result || '').replace(/```[\s\S]*?```/g, '[kode]'), 1200);
+  enqueue(
+    'task_completed',
+    `✅ <b>Tugas selesai</b>${bizName(task)}\n<b>${code(task)}</b> ${escapeHtml(task.title)}\n` +
+      `Model: <code>${escapeHtml(task.provider_name || '-')} / ${escapeHtml(task.model_used || '-')}</code>\n\n${escapeHtml(summary)}`
+  );
+}
+
+function onFailed({ task, error }) {
+  if (!ready('notify_task_failed', task)) return;
+  enqueue(
+    'task_failed',
+    `❌ <b>Tugas gagal</b>${bizName(task)}\n<b>${code(task)}</b> ${escapeHtml(task.title)}\nPenyebab: ${escapeHtml(truncate(error || task.error || '-', 800))}`
+  );
+}
+
+// Owner approval requests are always notified when system alerts are enabled (they need a human decision).
+function onApproval({ task, ids, items }) {
+  if (!ready('notify_system_alert')) return;
+  enqueue(
+    'approval',
+    `🔔 <b>Persetujuan owner dibutuhkan</b>${bizName(task)}\n<b>${code(task)}</b> ${escapeHtml(task.title)}\n` +
+      items.map((it, i) => `• #${ids[i] ?? '-'} ${escapeHtml(truncate(it, 300))}`).join('\n') +
+      '\n\nPutuskan di dashboard → Approvals. AI tidak mengeksekusi tindakan apa pun.'
+  );
+}
+
+function onAlert({ key, title, message }) {
+  const t = now();
+  if (lastAlert.has(key) && t - lastAlert.get(key) < ALERT_THROTTLE_MS) return;
+  lastAlert.set(key, t);
+  if (!ready('notify_system_alert')) return;
+  enqueue('system_alert', `⚠️ <b>System Alert</b>\n<b>${escapeHtml(title)}</b>\n${escapeHtml(truncate(message, 1500))}`);
+}
+
+export function startNotifier(logger) {
+  if (logger) log = logger;
+  bus.on('task:started', onStarted);
+  bus.on('task:completed', onCompleted);
+  bus.on('task:failed', onFailed);
+  bus.on('system:alert', onAlert);
+  bus.on('approval:created', onApproval);
+}
+
+export function stopNotifier() {
+  bus.off('task:started', onStarted);
+  bus.off('task:completed', onCompleted);
+  bus.off('task:failed', onFailed);
+  bus.off('system:alert', onAlert);
+  bus.off('approval:created', onApproval);
+}
+
+export function resetAlertThrottle() {
+  lastAlert.clear();
+}
+
+export function notifierIdle() {
+  return !sending && queue.length === 0;
+}

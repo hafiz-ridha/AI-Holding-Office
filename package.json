@@ -1,0 +1,23 @@
+﻿{
+  "name": "ai-virtual-office",
+  "version": "1.0.0",
+  "description": "Lightweight self-hosted AI Virtual Office with pixel-art dashboard, model router, and Telegram reports",
+  "private": true,
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning --max-old-space-size=96 src/server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test:system": "node --disable-warning=ExperimentalWarning test/system/restart-and-ram.mjs",
+    "migrate":"node --disable-warning=ExperimentalWarning src/db/migrate.js"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.10",
+    "fastify": "^5.12.8"
+  },
+  "license": "MIT"
+}
