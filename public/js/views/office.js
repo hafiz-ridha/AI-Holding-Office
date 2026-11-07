@@ -69,45 +69,35 @@ export async function render(root, [initial = 'hq'], ctx) {
 
   const panel = h('aside', { class: 'office-panel card', 'aria-live': 'polite', hidden: true });
   const chat = createChat({ onAgentMessage: (m) => engine?.say(m.sender_employee_id, m.content) });
-  // Employee status list ("Status karyawan"): its own column right of the chat on wide screens, otherwise a third tab.
+  // Employee status list ("Status karyawan"), shown as the third tab of the side column.
   const rosterCount = h('span', { class: 'small muted' });
   const rosterChips = h('div', { class: 'row', style: { gap: '4px' } });
   const rosterList = h('div', { class: 'roster-list' });
-  const roster = h('section', { class: 'card office-roster', 'aria-label': 'Status karyawan di kantor ini' },
+  const roster = h('section', { class: 'card office-roster', 'aria-label': 'Status karyawan di kantor ini', hidden: true },
     h('div', { class: 'row-between' }, h('h3', null, 'Status karyawan'), rosterCount), rosterChips, rosterList);
 
-  // Obrolan | Detail (| Status) column on the right of the office (below it on narrow screens).
+  // Obrolan | Detail | Status column on the right of the office (below it on narrow screens).
   let sideTab = 'chat';
-  const wideMq = window.matchMedia('(min-width: 1680px)');
   const tabChat = h('button', { class: 'office-tab active', type: 'button', onclick: () => showSide('chat') }, 'Obrolan');
   const tabInfo = h('button', { class: 'office-tab', type: 'button', onclick: () => { showSide('detail'); showPanel(); } }, 'Detail');
   const tabStatus = h('button', { class: 'office-tab', type: 'button', onclick: () => showSide('status') }, 'Status');
   function showSide(which) {
-    if (which === 'status' && wideMq.matches) which = 'chat'; // the list has its own column on wide screens
     sideTab = which;
     tabChat.classList.toggle('active', which === 'chat');
     tabInfo.classList.toggle('active', which === 'detail');
     tabStatus.classList.toggle('active', which === 'status');
     chat.el.hidden = which !== 'chat';
     panel.hidden = which !== 'detail';
-    roster.hidden = !wideMq.matches && which !== 'status';
+    roster.hidden = which !== 'status';
   }
-  const side = h('div', { class: 'office-side' }, h('div', { class: 'office-tabs' }, tabChat, tabInfo, tabStatus), chat.el, panel);
+  const side = h('div', { class: 'office-side' }, h('div', { class: 'office-tabs' }, tabChat, tabInfo, tabStatus), chat.el, panel, roster);
   const legend = h('div', { class: 'legend' }, ['idle', 'resting', 'pending', 'thinking', 'working', 'meeting', 'completed', 'error'].map((k) =>
     h('span', null, h('span', { class: 'dot', style: { background: STATE[k].color } }), `${STATE[k].label}${k === 'pending' ? ' (antre)' : ''}`)), h('span', null, '· WALKING: saat status berubah · Klik karakter, meja, atau ruangan untuk detail'));
   const layout = h('div', { class: 'office-layout' }, h('div', { class: 'stack-sm', style: { minWidth: 0 } }, statusBar, wrap, legend), side);
-  function placeRoster() {
-    const wide = wideMq.matches;
-    layout.classList.toggle('three', wide);
-    tabStatus.hidden = wide;
-    if (wide) layout.append(roster);
-    else side.append(roster);
-    showSide(sideTab);
-  }
-  // The office page uses the full window width (other pages keep their max width) and fits one screen.
+  // The office page uses the full window width (other pages keep their max width) and fits one screen,
+  // so the animation gets all the width left of the side column.
   root.classList.add('view-full');
   mount(root, h('div', { class: 'stack' }, tabs, layout));
-  placeRoster();
 
   mount(panel, h('p', { class: 'muted' }, 'Memuat kantor…'));
   let atlas;
@@ -710,7 +700,6 @@ export async function render(root, [initial = 'hq'], ctx) {
   const ro = new ResizeObserver(() => engine.resize());
   const onWinResize = () => engine.resize();
   window.addEventListener('resize', onWinResize);
-  wideMq.addEventListener('change', placeRoster);
   ro.observe(wrap);
   // Pause rendering when the tab is hidden or the canvas is scrolled out of view.
   let onScreen = true;
@@ -733,7 +722,6 @@ export async function render(root, [initial = 'hq'], ctx) {
     io.disconnect();
     document.removeEventListener('visibilitychange', onVis);
     document.removeEventListener('keydown', onKey);
-    wideMq.removeEventListener('change', placeRoster);
     root.classList.remove('view-full');
   };
 }
