@@ -78,8 +78,11 @@ export async function buildApp({ logger } = {}) {
     index: ['index.html'],
     maxAge: config.env === 'production' ? '1h' : 0,
     // @fastify/static v10 passes the Fastify reply (not the raw response).
+    // Code and data files (HTML, ES modules, CSS, JSON) are always revalidated (cheap 304 via ETag/Last-Modified).
+    // Otherwise, after an update the browser can run a cached old module next to new ones (broken office view)
+    // until max-age expires. Images keep max-age; versioned URLs (?v=hash) change when their content changes.
     setHeaders(reply, filePath) {
-      if (filePath.endsWith('.html')) reply.header('Cache-Control', 'no-cache');
+      if (/\.(html|m?js|css|json)$/.test(filePath)) reply.header('Cache-Control', 'no-cache');
     },
   });
 

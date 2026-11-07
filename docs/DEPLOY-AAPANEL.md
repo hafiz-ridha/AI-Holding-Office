@@ -172,4 +172,5 @@ Restore ke VPS baru: salin folder `data/` dan `.env` (dengan `APP_SECRET` yang s
 | Telegram tidak membalas perintah | Pastikan *Terima perintah (long polling)* aktif dan User ID Anda ada di daftar izin. `/start` menampilkan User ID. |
 | Laporan harian tidak terkirim | Telegram → riwayat notifikasi (lihat error). Laporan dicoba ulang maks. 3× per hari dan tidak pernah dikirim dua kali. |
 | RAM tinggi / OOM | `docker stats ai-virtual-holding`. Pastikan *Jumlah pekerjaan AI bersamaan* = 1; tambahkan swap. |
+| Kantor virtual tampil rusak setelah update (dinding seperti deretan mesin, lantai gelap, meja hilang) | Browser masih memakai file JS lama dari cache bersama sprite sheet baru. Versi sebelum Nov 2026 menyimpan JS/CSS di cache 1 jam; tekan **Ctrl+Shift+R** (Mac: Cmd+Shift+R) sekali, atau tunggu ±1 jam. Sejak perbaikan ini JS/CSS/JSON selalu divalidasi ulang (respons `304` kecil), jadi update berikutnya langsung terpakai tanpa hard refresh. |
 | Lupa password admin | `docker compose exec ai-holding node src/cli/reset-password.js admin 'PasswordBaru123'` (butuh akses SSH ke server). |

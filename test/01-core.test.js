@@ -102,6 +102,23 @@ test('security headers present', async () => {
   assert.equal(res.headers['x-content-type-options'], 'nosniff');
 });
 
+test('code and data files are always revalidated, so an update never mixes old and new modules', async () => {
+  for (const url of ['/', '/js/app.js', '/js/office/engine.js', '/css/app.css', '/assets/office-atlas.json']) {
+    const res = await app.inject(url);
+    assert.equal(res.statusCode, 200, url);
+    assert.equal(res.headers['cache-control'], 'no-cache', url);
+    assert.ok(res.headers.etag, `${url} has an ETag for cheap 304 revalidation`);
+    const again = await app.inject({ url, headers: { 'if-none-match': res.headers.etag } });
+    assert.equal(again.statusCode, 304, `${url} unchanged -> 304`);
+  }
+  // The sprite sheet URL is versioned by content hash, so its image may stay cached.
+  const meta = JSON.parse((await app.inject('/assets/office-atlas.json')).body);
+  assert.match(String(meta.version), /^[0-9a-f]{12}$/);
+  const png = await app.inject(`/assets/${meta.image}?v=${meta.version}`);
+  assert.equal(png.statusCode, 200);
+  assert.notEqual(png.headers['cache-control'], 'no-cache');
+});
+
 test('login brute-force is rate limited', async () => {
   let last;
   for (let i = 0; i < 6; i++) {

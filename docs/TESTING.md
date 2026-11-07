@@ -8,11 +8,11 @@ Semua pengujian AI memakai server **mock** OpenAI-compatible & Telegram lokal (`
 Integrasi dengan API key asli (OpenRouter, Groq, Gemini, 9Router, Telegram) **belum diuji** karena tidak ada
 kredensial; dashboard menyediakan *Test connection* untuk memverifikasinya setelah key diisi.
 
-## 1. Tes otomatis: `npm test` → 77/77 lulus
+## 1. Tes otomatis: `npm test` → 78/78 lulus
 
 | File | Cakupan |
 |---|---|
-| `01-core` (10) | migrasi, seed holding, enkripsi AES-GCM, zona waktu Asia/Jakarta, settings, login, CSRF, header keamanan, rate limit login |
+| `01-core` (11) | migrasi, seed holding, enkripsi AES-GCM, zona waktu Asia/Jakarta, settings, login, CSRF, header keamanan, rate limit login, cache file statis (HTML/JS/CSS/JSON selalu divalidasi ulang + `304`; URL sprite sheet berversi hash isi) |
 | `02-router` (11) | key terenkripsi & tersamar, test connection, sinkron model + deteksi gratis, key salah, 9Router tidak terjangkau/tidak kompatibel, fallback model, preferensi karyawan, cooldown 429, kuota harian, batas request global, batas kandidat, CRUD karyawan |
 | `03-orchestrator` (11) | Group CEO → Business Manager → staf → laporan bisnis → laporan holding, Shared Services per bisnis, jawaban langsung (1 panggilan), business task langsung, approval owner, pending → failed, cancel berantai, pause/resume, batas token, recovery restart, model per tingkatan |
 | `04-isolation` (9) | dokumen/keuangan/memori/nama bisnis A **tidak pernah** muncul di prompt AI bisnis B (dan sebaliknya), akses lintas bisnis via API ditolak, share dokumen eksplisit, izin lintas bisnis Group CEO, staf tidak bisa ditugaskan ke bisnis lain, bisnis bersejarah hanya bisa dinonaktifkan, validasi logo (tolak SVG/spoof) |

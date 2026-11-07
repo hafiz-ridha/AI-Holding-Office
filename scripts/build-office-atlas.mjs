@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const outDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'assets');
@@ -728,5 +729,7 @@ const png = Buffer.concat([
 ]);
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'office-atlas.png'), png);
-fs.writeFileSync(path.join(outDir, 'office-atlas.json'), JSON.stringify({ version: 1, image: 'office-atlas.png', width: W, height: H, frames }));
+// version = content hash: the PNG URL changes whenever the image changes, so a cached old sheet is never reused.
+const version = crypto.createHash('sha1').update(png).digest('hex').slice(0, 12);
+fs.writeFileSync(path.join(outDir, 'office-atlas.json'), JSON.stringify({ version, image: 'office-atlas.png', width: W, height: H, frames }));
 console.log(`office-atlas.png ${W}x${H}, ${Object.keys(frames).length} frames, ${png.length} bytes`);

@@ -1,10 +1,12 @@
-// Loads the local sprite sheet once (≈3 KB PNG + frame map) and draws frames by name.
+// Loads the local sprite sheet once (≈10 KB PNG + frame map) and draws frames by name.
+// The frame map is always revalidated (cache: 'no-cache') and the PNG URL carries the map's content-hash version,
+// so after an update the browser can never combine a new frame map with an old cached image (or the reverse).
 let promise = null;
 
 export function loadAtlas() {
   if (!promise) {
     promise = (async () => {
-      const meta = await fetch('/assets/office-atlas.json', { credentials: 'same-origin' }).then((r) => {
+      const meta = await fetch('/assets/office-atlas.json', { credentials: 'same-origin', cache: 'no-cache' }).then((r) => {
         if (!r.ok) throw new Error('Atlas kantor tidak ditemukan');
         return r.json();
       });
