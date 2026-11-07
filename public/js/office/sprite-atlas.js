@@ -1,15 +1,14 @@
-// Loads the local sprite sheet once (≈10 KB PNG + frame map) and draws frames by name.
-// The frame map is always revalidated (cache: 'no-cache') and the PNG URL carries the map's content-hash version,
-// so after an update the browser can never combine a new frame map with an old cached image (or the reverse).
+// Loads the office sprite sheet once and draws frames by name.
+// The frame map is an ES module generated together with the PNG (atlas-data.js), so it always ships with the code
+// that uses it; the PNG URL carries the content hash. A browser can therefore never combine new code with an old
+// cached frame map or image (that mismatch made the front yard and vehicles invisible after an update).
+import meta from './atlas-data.js';
+
 let promise = null;
 
 export function loadAtlas() {
   if (!promise) {
     promise = (async () => {
-      const meta = await fetch('/assets/office-atlas.json', { credentials: 'same-origin', cache: 'no-cache' }).then((r) => {
-        if (!r.ok) throw new Error('Atlas kantor tidak ditemukan');
-        return r.json();
-      });
       // onload/onerror instead of img.decode(): decode() can stay pending for cached images in some Chromium builds.
       const img = new Image();
       await new Promise((resolve, reject) => {
@@ -28,9 +27,13 @@ export function loadAtlas() {
           resolve();
         }
       });
+      if (img.naturalWidth !== meta.width || img.naturalHeight !== meta.height) {
+        throw new Error(`Sprite sheet kantor tidak cocok (${img.naturalWidth}×${img.naturalHeight}, seharusnya ${meta.width}×${meta.height}). Muat ulang halaman.`);
+      }
       return {
         img,
         frames: meta.frames,
+        version: meta.version,
         has: (name) => Boolean(meta.frames[name]),
         // Draw at world coordinates (logical px) into a context already scaled to world space.
         draw(ctx, name, x, y, w, h) {

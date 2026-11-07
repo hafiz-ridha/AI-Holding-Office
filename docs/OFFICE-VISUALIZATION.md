@@ -19,7 +19,7 @@ Browser (semua rendering di klien; server hanya mengirim JSON kecil)
         ▼
   office/engine.js ── kamera viewport (pan/zoom), rAF ≤30 FPS (≈4 FPS saat diam), pause saat tab/elemen tak terlihat
   office/scenes.js ── generator tata letak: HQ (ruang per fungsi) & kantor bisnis (dibangun lazy saat dibuka)
-  office/atlas.js  ── memuat 1 sprite sheet PNG lokal (furnitur, lantai, dinding, ikon) + peta frame JSON
+  office/sprite-atlas.js ── memuat 1 sprite sheet PNG lokal (?v=hash isi) + peta frame dari modul atlas-data.js (dihasilkan skrip)
   office/sprites.js── karakter prosedural dari palet avatar (tetap bisa diubah di AI Employees)
         ▲
   GET /api/office                      state nyata per karyawan (+ lokasi meeting, bisnis yang dikunjungi)
@@ -68,7 +68,7 @@ Animasi berjalan hanya berdasarkan perubahan state dari server. Tidak ada karakt
 |---|---|
 | `scripts/build-office-atlas.mjs` | baru: generator sprite sheet PNG + JSON |
 | `public/assets/office-atlas.png`, `.json` | baru: aset hasil generator |
-| `public/js/office/atlas.js`, `scenes.js` | baru |
+| `public/js/office/sprite-atlas.js` (dulu `atlas.js`), `atlas-data.js`, `scenes.js` | baru |
 | `public/js/office/engine.js` | ditulis ulang (viewport, kamera, state baru, hit-test meja/ruang) |
 | `public/js/office/sprites.js` | ditambah pose/ikon; API lama tetap (dipakai halaman lain) |
 | `public/js/views/office.js` | pemilih kantor, panel interaktif, info bisnis |
@@ -93,10 +93,19 @@ Semua data berasal dari endpoint yang sudah ada.
 
 ### RESTING (tidak ada di backend)
 
-Diturunkan di browser dari data nyata: karyawan berstatus IDLE yang tidak punya aktivitas tugas ≥ 20 menit
+Diturunkan di browser dari data nyata: karyawan berstatus IDLE yang aktivitas tugas terakhirnya tercatat ≥ 20 menit lalu
 (`updated_at` tugas terakhir sebagai pelaksana atau manager, dari `GET /api/tasks?limit=100` yang disegarkan tiap 60 detik,
-ditambah perubahan status yang terlihat selama halaman terbuka). Mereka duduk di kursi Lounge/Pantry sebanyak kursi yang
-tersedia; sisanya tetap berdiri di meja. Begitu ada tugas, mereka berjalan kembali lewat lorong samping area duduk.
+ditambah perubahan status yang terlihat selama halaman terbuka). Mereka duduk santai di kursinya sendiri (20–45 detik) lalu
+sesekali jalan-jalan sebentar di ruangannya. Karyawan tanpa aktivitas tercatat (instalasi baru) berstatus IDLE.
+
+### IDLE: jalan-jalan acak di ruangan sendiri
+
+Setiap ruangan punya grid jalan 8 px (dihitung sekali per kantor): sel diblokir bila kaki karakter menyentuh meja,
+furnitur, tanaman, atau meja rapat. Karyawan IDLE memilih titik acak yang terjangkau (24–150 px) di ruangannya, berjalan
+lewat jalur terpendek (BFS, hanya horizontal/vertikal, kecepatan tetap), berhenti 3–9 detik sambil menoleh, sesekali
+kembali ke samping mejanya. Rute karena tugas/rapat memakai grid yang sama di dalam ruangan, lalu pintu–koridor–lorong.
+Karyawan tidak pernah keluar dari ruangannya tanpa tugas atau rapat nyata. Lounge/Pantry kini hanya dekorasi.
+Terverifikasi di browser: semua pintu bebas; setiap tempat berdiri & kursi terjangkau (juga tata letak banyak baris).
 
 ### Panel ruangan → endpoint
 

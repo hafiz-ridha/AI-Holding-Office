@@ -1,7 +1,7 @@
 // AI Virtual Office: HQ + one office per business (built lazily), interactive panels, real task states only.
 import { get } from '../api.js';
 import { h, mount, clear, badge, fmtRel, fmtDate, fmtNum, taskCode, md, KIND_LABEL, ORG_LABEL, emptyState } from '../ui.js';
-import { loadAtlas } from '../office/atlas.js';
+import { loadAtlas } from '../office/sprite-atlas.js';
 import { buildHQScene, buildBusinessScene, sceneKey } from '../office/scenes.js';
 import { OfficeEngine, dayPeriod } from '../office/engine.js';
 import { avatarCanvas } from '../office/sprites.js';
@@ -11,8 +11,8 @@ import { createChat } from './chat.js';
 import { roomPanel } from './officePanels.js';
 
 export const STATE = {
-  idle: { label: 'IDLE', text: 'Tidak ada tugas', color: '#9aa4b2' },
-  resting: { label: 'RESTING', text: 'Istirahat di lounge (tidak ada tugas ≥ 20 menit)', color: '#7dd3fc' },
+  idle: { label: 'IDLE', text: 'Tidak ada tugas (jalan-jalan di ruangannya)', color: '#9aa4b2' },
+  resting: { label: 'RESTING', text: 'Duduk santai di mejanya (tidak ada aktivitas ≥ 20 menit)', color: '#7dd3fc' },
   pending: { label: 'IDLE', text: 'Menunggu antrean (duduk santai)', color: '#f0b354' },
   thinking: { label: 'THINKING', text: 'Menganalisis & merencanakan (panggilan AI berjalan)', color: '#8da4ff' },
   working: { label: 'WORKING', text: 'Mengerjakan tugas (panggilan AI berjalan)', color: '#3b82f6' },
@@ -108,11 +108,12 @@ export async function render(root, [initial = 'hq'], ctx) {
   let selection = null;
   const scenes = new Map(); // lazy cache: sceneId -> { key, scene }
 
-  // RESTING is not a backend state: it is derived from real task history. An employee without any task who has not
-  // been active for REST_AFTER_MS sits in the lounge/pantry (as many as there are seats) and walks back on a new task.
+  // RESTING is not a backend state: it is derived from real task history. An employee without a task whose last
+  // known activity is at least REST_AFTER_MS ago sits relaxed at its own desk (strolling in its room now and then).
+  // No known activity (fresh install, or nothing in the latest 100 tasks) = IDLE: strolls around its own room.
+  // Nobody ever leaves their room unless a real task or meeting calls them.
   const REST_AFTER_MS = 20 * 60 * 1000;
   const lastActive = new Map(); // employeeId -> ms of the latest real activity (task updated / state seen active)
-  let historyFloor = 0; // when the history page is full, unknown employees were active at most this recently
   let historyAt = 0;
   async function loadHistory() {
     historyAt = Date.now();
@@ -122,7 +123,6 @@ export async function render(root, [initial = 'hq'], ctx) {
         if (id) lastActive.set(id, Math.max(lastActive.get(id) || 0, t.updated_at || t.created_at || 0));
       }
     }
-    historyFloor = r.items.length >= 100 ? Math.min(...r.items.map((t) => t.updated_at || t.created_at || 0)) : 0;
   }
   function restingSet() {
     const now = Date.now();
@@ -133,7 +133,8 @@ export async function render(root, [initial = 'hq'], ctx) {
         lastActive.set(e.id, now);
         continue;
       }
-      if (now - (lastActive.get(e.id) ?? historyFloor) >= REST_AFTER_MS) out.add(e.id);
+      const last = lastActive.get(e.id);
+      if (last && now - last >= REST_AFTER_MS) out.add(e.id);
     }
     return out;
   }

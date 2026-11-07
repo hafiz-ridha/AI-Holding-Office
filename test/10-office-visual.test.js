@@ -4,10 +4,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { buildHQScene, buildBusinessScene, findCollisions, T } from '../public/js/office/scenes.js';
+import atlasModule from '../public/js/office/atlas-data.js';
 
 const atlas = JSON.parse(fs.readFileSync(new URL('../public/assets/office-atlas.json', import.meta.url), 'utf8'));
 const size = (name) => atlas.frames[name] || { w: 0, h: 0 };
+
+test('frame map module (loaded by the app) matches the JSON and the PNG it versions', () => {
+  // The app loads atlas-data.js together with its code; a stale or mismatched map made the front yard invisible.
+  assert.deepEqual(atlasModule, atlas);
+  const png = fs.readFileSync(new URL('../public/assets/office-atlas.png', import.meta.url));
+  assert.equal(png.readUInt32BE(16), atlasModule.width);
+  assert.equal(png.readUInt32BE(20), atlasModule.height);
+  // The PNG URL version is the content hash, so a changed image always gets a new URL.
+  assert.equal(atlasModule.version, crypto.createHash('sha1').update(png).digest('hex').slice(0, 12));
+});
 
 function makeData({ businesses = 3, staffPerBiz = 2, shared = ['group_finance', 'secretary', 'researcher', 'developer', 'hr'], extraShared = 0 } = {}) {
   const employees = [];

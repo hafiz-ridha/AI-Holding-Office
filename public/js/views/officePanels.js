@@ -234,7 +234,7 @@ const BUILDERS = {
     return [
       section('Aktivitas karyawan', h('div', { class: 'row' }, Object.entries(counts).map(([k, v]) => h('span', { class: 'pill' }, env.stateBadge(k), ` ${v}`)))),
       section(`Sedang tidak bertugas (${free.length})`, free.length ? h('div', { class: 'stack-xs' }, free.map((e) => personRow(e, env))) : note('Semua karyawan sedang bertugas.'),
-        note('RESTING = tidak ada tugas dan tidak beraktivitas ≥ 20 menit (dari riwayat tugas).')),
+        note('IDLE = jalan-jalan di ruangannya. RESTING = tidak ada aktivitas ≥ 20 menit (dari riwayat tugas), duduk santai di mejanya.')),
       section('Info kantor', h('dl', { class: 'kv small' },
         h('dt', null, 'Kantor'), h('dd', null, env.scene.title),
         h('dt', null, 'Waktu lokal'), h('dd', null, now.toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })),

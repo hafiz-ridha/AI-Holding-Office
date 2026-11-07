@@ -60,7 +60,6 @@ export class OfficeEngine {
     this.chars = new Map();
     this.seatAlloc = new Map();
     this.visitorAlloc = new Map();
-    this.restAlloc = new Map();
     this.scene = null;
     this.zoomLevel = null; // null = fit
     this.cam = { x: 0, y: 0 };
@@ -126,11 +125,11 @@ export class OfficeEngine {
       this.chars.clear();
       this.seatAlloc.clear();
       this.visitorAlloc.clear();
-      this.restAlloc.clear();
       this.selected = null;
       this.hovered = null;
       this.zoomLevel = null;
       this.firstPlacement = true;
+      this.grids = new Map(); // walk grids are per scene
     }
     if (scene.business?.has_logo && !scene.logoImg) {
       const img = new Image();
@@ -588,11 +587,14 @@ export class OfficeEngine {
   }
 
   // ---------------- state ----------------
-  // opts.resting: Set of employee ids that are idle long enough to rest in the lounge (derived from real activity).
+  // opts.resting: Set of employee ids without a task whose last real activity is old (derived by the page).
+  // IDLE employees stroll around their own room; RESTING employees sit relaxed at their own desk and stretch their
+  // legs now and then. Neither ever leaves its room unless a real task/meeting calls them elsewhere.
   setData(data, opts = {}) {
     if (!this.scene) return;
     const s = this.scene;
     const resting = opts.resting || new Set();
+    const now = performance.now();
     const present = new Set();
     const ms = s.meeting.scope;
     const here = (m) => Boolean(m) && m.scope === ms.scope && (ms.scope === 'hq' || m.business_id === ms.business_id);
@@ -611,22 +613,13 @@ export class OfficeEngine {
         d = s.visitorDesks[this.visitorAlloc.get(e.id)] || null;
       }
       let state = STATE_DOT[e.state] && e.state !== 'resting' ? e.state : 'idle'; // unknown/missing state -> IDLE
-      if (state === 'idle' && resting.has(e.id) && s.restSeats.length) {
-        if (!this.restAlloc.has(e.id)) {
-          const used = new Set(this.restAlloc.values());
-          const free = s.restSeats.findIndex((_, i) => !used.has(i));
-          if (free >= 0) this.restAlloc.set(e.id, free);
-        }
-        if (this.restAlloc.has(e.id)) state = 'resting';
-      }
-      if (state !== 'resting') this.restAlloc.delete(e.id);
+      if (state === 'idle' && resting.has(e.id)) state = 'resting';
       const meetingHere = state === 'meeting' && here(e.meeting);
       let target;
       let pose;
       let bubble = null;
       let chairFrame = 'chair';
       let note = null;
-      let restSeat = null;
       if (meetingHere) {
         if (e.meeting.leader) {
           target = s.meeting.leader;
@@ -669,8 +662,7 @@ export class OfficeEngine {
             target = d.stand; pose = 'stand'; bubble = 'bub_warn';
             break;
           case 'resting':
-            restSeat = s.restSeats[this.restAlloc.get(e.id)];
-            target = restSeat; pose = restSeat.pose; bubble = 'bub_rest';
+            target = d.seat; pose = 'sit_front'; bubble = 'bub_rest'; chairFrame = 'chair_back_n';
             break;
           default:
             target = d.stand; pose = 'stand';
@@ -688,13 +680,19 @@ export class OfficeEngine {
         c.avKey = avKey;
         c.sheet = buildSheet(e.avatar);
       }
-      if (c.tx !== Math.round(target.x) || c.ty !== Math.round(target.y)) {
+      // IDLE/RESTING employees roam their own room (see wander()); the 2 s data refresh must not pull them back.
+      const roaming = state === 'idle' || state === 'resting';
+      const keepRoaming = roaming && c.state === state && c.home;
+      if (!keepRoaming && (c.tx !== Math.round(target.x) || c.ty !== Math.round(target.y) || c.state !== state)) {
         c.tx = Math.round(target.x);
         c.ty = Math.round(target.y);
         if (!(this.firstPlacement && c.x === target.x && c.y === target.y)) c.path = this.route(c, { ...target, x: c.tx, y: c.ty });
       }
+      // Resting employees first sit a while; idle ones start strolling after a few seconds (staggered).
+      if (roaming && !keepRoaming) c.wanderNext = now + (state === 'resting' ? 20000 + Math.random() * 25000 : 1500 + Math.random() * 4000);
       Object.assign(c, {
-        e, state, desk: d, pose, bubble, note, restSeat,
+        e, state, desk: d, pose, bubble, note,
+        home: roaming ? target : null,
         chairFrame: target === d?.seat ? (d?.exec && chairFrame === 'chair' ? 'exec_chair' : chairFrame) : null,
         meetingSeat: meetingHere && target !== s.meeting.leader ? target : null,
       });
@@ -704,7 +702,6 @@ export class OfficeEngine {
         this.chars.delete(id);
         this.visitorAlloc.delete(id);
         this.seatAlloc.delete(id);
-        this.restAlloc.delete(id);
       }
     }
     this.firstPlacement = false;
@@ -716,45 +713,182 @@ export class OfficeEngine {
     return this.scene.rooms.find((r) => p.x >= r.x * T && p.x < (r.x + r.w) * T && p.y >= r.y * T && p.y < (r.y + r.h) * T) || null;
   }
 
-  // Grid-aligned paths: inside a room walk along the free lane above the bottom wall; between rooms use
-  // doors, corridors and the left hallway. Only horizontal/vertical segments (4-direction walking).
+  // Paths with only horizontal/vertical segments (4-direction walking). Inside a room: shortest path on a walk grid
+  // that avoids desks, furniture and the meeting table. Between rooms: room door, corridor, left hallway, door.
   route(c, target) {
-    // Lounge seats are reached via the aisle next to the seating group (never through sofas/tables).
-    const pre = [];
-    const post = [];
-    const rs = this.scene.restSeats.find((r) => r.aisleX != null && Math.abs(r.x - c.x) < 1 && Math.abs(r.y - c.y) < 1);
-    if (rs) pre.push({ x: rs.aisleX, y: rs.y });
-    let to = target;
-    if (target.aisleX != null) {
-      to = { x: target.aisleX, y: target.y };
-      post.push({ x: target.x, y: target.y });
-    }
-    return [...pre, ...this.routeGrid(pre[0] || c, to), ...post];
-  }
-
-  routeGrid(c, target) {
     const s = this.scene;
     const from = this.roomAt(c);
     const to = this.roomAt(target);
-    if (from && to && from === to) {
-      if (Math.abs(c.x - target.x) < 2 || Math.abs(c.y - target.y) < 2) return [{ x: target.x, y: target.y }];
-      const lane = from.door.y - 4;
-      return [{ x: c.x, y: lane }, { x: target.x, y: lane }, { x: target.x, y: target.y }];
-    }
+    if (from && to && from === to) return this.roomPath(from, c, target);
     const path = [];
     let corY;
     if (from) {
-      path.push({ x: c.x, y: from.door.y - 4 }, { x: from.door.x, y: from.door.y - 4 }, { x: from.door.x, y: from.door.corridorY });
+      path.push(...this.roomPath(from, c, { x: from.door.x, y: from.door.y - 4 }), { x: from.door.x, y: from.door.corridorY });
       corY = from.door.corridorY;
     } else {
       corY = c.y;
     }
     if (to) {
       if (to.door.corridorY !== corY) path.push({ x: s.hallX, y: corY }, { x: s.hallX, y: to.door.corridorY });
-      path.push({ x: to.door.x, y: to.door.corridorY }, { x: to.door.x, y: to.door.y - 4 }, { x: target.x, y: to.door.y - 4 });
-    }
-    path.push({ x: target.x, y: target.y });
+      path.push({ x: to.door.x, y: to.door.corridorY }, ...this.roomPath(to, { x: to.door.x, y: to.door.y - 4 }, target));
+    } else path.push({ x: target.x, y: target.y });
     return path;
+  }
+
+  // Walk grid of a room (8 px cells). A cell is blocked when a character's feet would touch a piece of furniture's
+  // sprite (+ small margin). Standing north of an object is fine: the body is drawn upward from the feet.
+  gridFor(room) {
+    this.grids ||= new Map();
+    if (this.grids.get(room)) return this.grids.get(room);
+    const s = this.scene;
+    const C = 8;
+    const x0 = room.x * T + 8;
+    const y0 = (room.y + 2) * T + 6;
+    const cols = Math.max(1, Math.floor(((room.x + room.w) * T - 8 - x0) / C));
+    const rows = Math.max(1, Math.floor(((room.y + room.h) * T - 8 - y0) / C));
+    const obs = [];
+    const add = (x, y, w, h) => obs.push({ x: x - 3, y: y - 4, w: w + 6, h: h + 7 });
+    const inRoom = (x, y, w, h) => x < (room.x + room.w) * T && x + w > room.x * T && y < (room.y + room.h) * T && y + h > room.y * T;
+    for (const p of s.props) if (inRoom(p.x, p.y, p.w, p.h)) add(p.x, p.y, p.w, p.h);
+    for (const a of s.ambient) {
+      if (a.type !== 'plant') continue;
+      const z = this.atlas.size(a.f);
+      if (inRoom(a.x, a.y, a.w ?? z.w, a.h ?? z.h)) add(a.x, a.y, a.w ?? z.w, a.h ?? z.h);
+    }
+    for (const e of s.extras) {
+      const z = this.atlas.size(e.f);
+      if (inRoom(e.x, e.y, z.w, z.h)) add(e.x, e.y, z.w, z.h);
+    }
+    for (const d of [...s.desks, ...s.visitorDesks]) if (d.room === room) add(d.rect.x, d.rect.y, d.rect.w, d.rect.h);
+    if (s.meeting?.room === room) {
+      const t = s.meeting.table;
+      add(t.x - 10, t.y - 24, t.w + 20, t.h + 46);
+    }
+    const blocked = new Uint8Array(cols * rows);
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        const fx = x0 + i * C + C / 2 - 5;
+        const fy = y0 + j * C + C / 2 - 3;
+        if (obs.some((o) => fx < o.x + o.w && fx + 10 > o.x && fy < o.y + o.h && fy + 5 > o.y)) blocked[j * cols + i] = 1;
+      }
+    }
+    const g = { x0, y0, cols, rows, C, blocked };
+    this.grids.set(room, g);
+    return g;
+  }
+
+  cellOf(g, p) {
+    const i = Math.min(g.cols - 1, Math.max(0, Math.floor((p.x - g.x0) / g.C)));
+    const j = Math.min(g.rows - 1, Math.max(0, Math.floor((p.y - g.y0) / g.C)));
+    return j * g.cols + i;
+  }
+
+  cellCenter(g, n) {
+    return { x: g.x0 + (n % g.cols) * g.C + g.C / 2, y: g.y0 + Math.floor(n / g.cols) * g.C + g.C / 2 };
+  }
+
+  // Breadth-first search over free cells (start/goal may be blocked, e.g. a desk seat). Returns prev[] links.
+  bfs(g, start, goal = -1) {
+    const prev = new Int32Array(g.cols * g.rows).fill(-1);
+    prev[start] = start;
+    const q = [start];
+    for (let k = 0; k < q.length; k++) {
+      const cur = q[k];
+      if (cur === goal) break;
+      const ci = cur % g.cols;
+      const cj = Math.floor(cur / g.cols);
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = ci + di;
+        const nj = cj + dj;
+        if (ni < 0 || nj < 0 || ni >= g.cols || nj >= g.rows) continue;
+        const n = nj * g.cols + ni;
+        if (prev[n] !== -1 || (g.blocked[n] && n !== goal)) continue;
+        prev[n] = cur;
+        q.push(n);
+      }
+    }
+    return prev;
+  }
+
+  roomPath(room, from, to) {
+    const g = this.gridFor(room);
+    const start = this.cellOf(g, from);
+    const goal = this.cellOf(g, to);
+    const pts = [];
+    let px = from.x;
+    let py = from.y;
+    const step = (x, y) => {
+      if (Math.abs(x - px) < 0.5 && Math.abs(y - py) < 0.5) return;
+      if (Math.abs(x - px) >= 0.5 && Math.abs(y - py) >= 0.5) pts.push({ x, y: py }); // keep it orthogonal
+      pts.push({ x, y });
+      px = x;
+      py = y;
+    };
+    if (start !== goal) {
+      const prev = this.bfs(g, start, goal);
+      if (prev[goal] === -1) {
+        // No free route (should not happen): fall back to the free lane above the bottom wall.
+        const lane = room.door.y - 4;
+        return [{ x: from.x, y: lane }, { x: to.x, y: lane }, { x: to.x, y: to.y }];
+      }
+      const cells = [];
+      for (let n = goal; n !== start; n = prev[n]) cells.push(n);
+      cells.reverse();
+      for (const n of cells.slice(0, -1)) {
+        const p = this.cellCenter(g, n);
+        step(p.x, p.y);
+      }
+    }
+    step(to.x, to.y);
+    // Drop intermediate points on straight lines.
+    return pts.filter((p, i) => {
+      const a = i ? pts[i - 1] : { x: from.x, y: from.y };
+      const b = pts[i + 1];
+      return !b || !((a.x === p.x && p.x === b.x) || (a.y === p.y && p.y === b.y));
+    });
+  }
+
+  // Idle stroll: pick a random reachable free spot in the employee's own room, walk there, pause, glance around.
+  wander(c, now) {
+    const room = c.desk?.room || this.roomAt(c);
+    if (!room || this.roomAt(c) !== room) {
+      c.wanderNext = now + 5000;
+      return;
+    }
+    const atHome = c.home && Math.abs(c.x - c.home.x) < 1 && Math.abs(c.y - c.home.y) < 1;
+    let target = null;
+    if (c.state === 'resting' && !atHome) target = c.home; // back to the chair after a short stroll
+    else if (c.state === 'idle' && !atHome && Math.random() < 0.2) target = c.home;
+    else {
+      const g = this.gridFor(room);
+      const start = this.cellOf(g, c);
+      const prev = this.bfs(g, start);
+      const options = [];
+      for (let n = 0; n < prev.length; n++) {
+        if (prev[n] === -1 || n === start || g.blocked[n]) continue;
+        const p = this.cellCenter(g, n);
+        const dist = Math.abs(p.x - c.x) + Math.abs(p.y - c.y);
+        if (dist >= 24 && dist <= 150) options.push(p);
+      }
+      if (options.length) target = options[Math.floor(Math.random() * options.length)];
+    }
+    if (!target) {
+      c.wanderNext = now + 4000;
+      return;
+    }
+    c.path = this.roomPath(room, c, target);
+    c.tx = Math.round(target.x);
+    c.ty = Math.round(target.y);
+    let len = 0;
+    let q = c;
+    for (const p of c.path) {
+      len += Math.abs(p.x - q.x) + Math.abs(p.y - q.y);
+      q = p;
+    }
+    const pause = c.state === 'resting'
+      ? (target === c.home ? 20000 + Math.random() * 25000 : 2500 + Math.random() * 3500)
+      : 3000 + Math.random() * 6000;
+    c.wanderNext = now + (len / SPEED) * 1000 + pause;
   }
 
   // ---------------- camera ----------------
@@ -858,7 +992,11 @@ export class OfficeEngine {
 
   update(dt) {
     let moving = false;
+    const now = performance.now();
     for (const c of this.chars.values()) {
+      if (!c.path.length && this.ambientOn && c.home && (c.state === 'idle' || c.state === 'resting') && now >= (c.wanderNext || 0)) {
+        this.wander(c, now);
+      }
       if (!c.path.length) continue;
       const wp = c.path[0];
       const dx = wp.x - c.x;
@@ -934,7 +1072,8 @@ export class OfficeEngine {
     }
     for (const c of this.chars.values()) {
       if (!c.e || !this.isVisibleWorld(c.x, c.y)) continue;
-      const seated = !c.path.length && (c.pose === 'sit_back' || c.pose === 'sit_front');
+      const pose0 = this.livePose(c);
+      const seated = !c.path.length && (pose0 === 'sit_back' || pose0 === 'sit_front');
       const atDesk = c.desk?.seat && c.x === c.desk.seat.x && c.y === c.desk.seat.y;
       if (c.desk?.monitors && !c.path.length && atDesk && (c.state === 'working' || c.state === 'thinking')) {
         const dev = c.desk.frame === 'desk_dev';
@@ -976,14 +1115,14 @@ export class OfficeEngine {
     // Activity indicators (small, above heads).
     for (const c of this.chars.values()) {
       if (!c.e || c.path.length || !c.bubble || !this.isVisibleWorld(c.x, c.y)) continue;
-      const seated = c.pose === 'sit_back' || c.pose === 'sit_front';
+      const seated = this.livePose(c) === 'sit_back' || this.livePose(c) === 'sit_front';
       const by = c.y - FH - (seated ? 9 : 13) - (c.pose === 'jump' ? 3 : 0);
       if (c.bubble === 'gear') A.draw(ctx, `ico_gear_${Math.floor(sec * 4) % 2}`, c.x + 3, by + 1);
       else if (c.bubble === 'think') {
         A.draw(ctx, `bub_type_${Math.floor(sec * 3) % 3}`, c.x + 3, by);
         A.draw(ctx, 'ico_ai', c.x + 12, by - 4);
       } else if (c.bubble === 'bub_rest') {
-        if (Math.floor((sec + c.phase) / 3) % 3 === 0) A.draw(ctx, c.bubble, c.x + 3, by);
+        if (seated && Math.floor((sec + c.phase) / 3) % 3 === 0) A.draw(ctx, c.bubble, c.x + 3, by);
       } else A.draw(ctx, c.bubble, c.x + 3, by);
       if (c.state === 'completed') A.draw(ctx, `sparkle_${Math.floor(sec * 3) % 2}`, c.x - 13, c.y - FH + 2);
     }
@@ -1038,8 +1177,15 @@ export class OfficeEngine {
     }
   }
 
+  // A resting employee only sits while at its own chair; strolling around the room it stands.
+  livePose(c) {
+    if (c.state !== 'resting') return c.pose;
+    const s = c.desk?.seat;
+    return s && Math.abs(c.x - s.x) < 1 && Math.abs(c.y - s.y) < 1 ? c.pose : 'stand';
+  }
+
   drawChar(ctx, c, sec) {
-    let pose = c.path.length ? c.walkPose : c.pose;
+    let pose = c.path.length ? c.walkPose : this.livePose(c);
     let flip = c.flip;
     let fps = 1;
     let frame;
@@ -1047,7 +1193,7 @@ export class OfficeEngine {
     else if (pose === 'sit_back') fps = c.state === 'working' ? 5 : 0;
     else if (pose === 'jump') fps = 3;
     else if (pose === 'sit_front') fps = 0.5;
-    if (!c.path.length && pose === 'stand' && c.state === 'idle' && this.ambientOn) {
+    if (!c.path.length && pose === 'stand' && (c.state === 'idle' || c.state === 'resting') && this.ambientOn) {
       // Idle: breathing, and now and then a short glance to one side.
       const cyc = (sec + c.phase) % 9;
       if (cyc > 7.6) {

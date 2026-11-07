@@ -171,9 +171,11 @@ Menu **AI Virtual Office**:
 - Shared Services muncul di "Meja Tamu" kantor bisnis hanya saat sedang mengerjakan tugas bisnis itu.
 - Tombol **♪** menyalakan suara (ketikan & notifikasi). Suara selalu **mati** saat halaman dibuka dan tidak pernah autoplay.
 
-Semua animasi berasal dari status tugas di database dan antrean. Tanpa tugas, karakter diam (IDLE). Karyawan tanpa tugas
-yang tidak beraktivitas ≥ 20 menit (dihitung dari riwayat tugas) duduk di sofa Lounge/Pantry (**RESTING**) sebanyak kursi
-yang tersedia, lalu berjalan kembali ke meja begitu mendapat tugas. Pencahayaan mengikuti jam browser (pagi, siang, sore,
+Semua status kerja berasal dari status tugas di database dan antrean; tidak ada karakter yang terlihat bekerja tanpa tugas.
+Karyawan tanpa tugas (**IDLE**) berjalan mondar-mandir secara acak di ruangannya sendiri (jalan 4 arah mengikuti grid,
+menghindari meja dan furnitur, berhenti sejenak dan menoleh). Karyawan yang aktivitas terakhirnya tercatat ≥ 20 menit lalu
+(**RESTING**, dari riwayat tugas) duduk santai di kursinya sendiri dan sesekali jalan-jalan di ruangannya. Begitu ada tugas
+atau rapat, mereka berjalan ke meja/ruang rapat. Gerakan acak ini mati jika sistem meminta *reduced motion*. Pencahayaan mengikuti jam browser (pagi, siang, sore,
 malam: lampu ruangan menyala).
 
 ### Obrolan agen
@@ -201,7 +203,9 @@ Rendering 100% di browser (Canvas 2D, tanpa WebGL/game engine):
   node scripts/build-office-atlas.mjs
   ```
 
-  File ini bisa diganti dengan pixel art Anda sendiri asalkan nama frame di `office-atlas.json` tetap sama.
+  Skrip yang sama menulis peta frame ke `office-atlas.json` dan `public/js/office/atlas-data.js` (modul yang dimuat aplikasi,
+  sehingga peta frame selalu ikut versi kode; URL PNG memakai hash isi). Jika mengganti gambar dengan pixel art sendiri,
+  pertahankan nama frame dan jalankan ulang skrip agar kedua file itu ikut diperbarui.
 - FPS adaptif: 30 FPS saat ada karakter berjalan, ±10 FPS saat mengetik/selebrasi, 2 FPS saat diam. Rendering berhenti saat tab tersembunyi atau kanvas tidak terlihat.
 - Animasi ambient (tanaman, jam dinding, lampu server) mati otomatis jika sistem meminta *reduced motion*.
 - Kantor bisnis dibangun saat pertama kali dibuka (lazy loading).
