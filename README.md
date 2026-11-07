@@ -26,7 +26,7 @@ Dokumentasi:
 | AI provider | 16 preset cloud gratis/kredit + 9Router + custom OpenAI-compatible; fallback, cooldown, batas request & token, model default per tingkatan |
 | Telegram | Laporan harian holding (sekali per hari, tahan restart), notifikasi tugas/error/persetujuan, perintah `/overview /companies /business <slug> /report /tasks /finance /approvals /task /pause /resume` |
 | Kantor virtual | Pixel art top-down orisinal: Kantor Pusat (CEO Office, Meeting Room, Business Managers, Finance, Secretary, Research, Developer, HR, Marketing, Lounge) + satu kantor per bisnis (otomatis dari database). State IDLE/THINKING/WORKING/WALKING/MEETING/COMPLETED/ERROR (+ RESTING dari riwayat tugas) mengikuti data tugas nyata; klik karakter, meja, atau ruangan untuk detail; status bar, notifikasi, siang/malam, minimap |
-| Keamanan | Login scrypt, sesi HttpOnly, CSRF, rate limit, CSP ketat, API key terenkripsi AES-256-GCM, whitelist Telegram, audit log, persetujuan owner untuk tindakan berisiko (AI tidak pernah mengeksekusi tindakan) |
+| Keamanan | Login scrypt, sesi HttpOnly, CSRF, rate limit, CSP ketat (koneksi keluar dari browser hanya ke Open-Meteo untuk cuaca otomatis), API key terenkripsi AES-256-GCM, whitelist Telegram, audit log, persetujuan owner untuk tindakan berisiko (AI tidak pernah mengeksekusi tindakan) |
 
 ## Menjalankan secara lokal
 
@@ -148,13 +148,25 @@ Menu **AI Virtual Office**:
 - Pilih **Kantor Pusat** atau kantor bisnis mana pun lewat tab. Bisnis baru langsung muncul tanpa perubahan kode.
 - **Status bar** di atas kantor: tanggal/jam lokal, jumlah karyawan, yang sedang bekerja, tugas aktif, selesai hari ini,
   jumlah bisnis, dan status sistem (normal / antrean dijeda / provider AI bermasalah). Semua angka dari backend.
-- Seret untuk menggeser; tombol **+ / − / Pas** (atau Ctrl+scroll, tombol `+` `-` `0`) untuk zoom dan reset kamera.
-  Tombol **Peta** menampilkan minimap (klik minimap untuk memindahkan kamera).
-- Arahkan kursor ke karakter untuk tooltip (nama, status, tugas aktif). Klik **karakter** untuk panel karyawan melayang:
-  departemen, bisnis, status, tugas & progres subtugas (jika ada), provider/model AI, token, aktivitas terakhir, riwayat.
-- Klik **meja** untuk detail pekerjaan karyawan tersebut. Klik **ruangan** mana pun untuk panel sesuai fungsinya
-  (CEO: ringkasan grup & approval; Finance: keuangan bulan ini; Developer Lab: RAM, uptime, provider, error; HR: karyawan
-  & beban kerja; Lounge: siapa yang sedang tidak bertugas; dst.). Panel hanya menampilkan data yang tercatat di sistem.
+- Kantor mengisi seluruh lebar di kiri kolom **Obrolan/Detail**, dan tinggi kanvas mengikuti layar sehingga sejajar dengan
+  kolom obrolan. Seret untuk menggeser; tombol **+ / − / Pas** (atau Ctrl+scroll, tombol `+` `-` `0`) untuk zoom dan reset
+  kamera. Tombol **Peta** menampilkan minimap (mati secara default; klik minimap untuk memindahkan kamera).
+- **Halaman depan** (bagian atas peta): langit sesuai jam browser (matahari/bulan di posisi sebenarnya, bintang, siluet kota),
+  jalan, trotoar dengan lampu jalan dan pohon, parkiran (zona motor dua baris, parkir paralel dengan satu pickup double
+  cabin lifted, jalan masuk dari jalan raya), taman, dan pintu masuk gedung. Kendaraan hanya dekorasi.
+- **Cuaca**: klik chip *Cuaca* di status bar atau klik halaman depan, lalu pilih:
+  - *Otomatis*: cuaca asli dari [Open-Meteo](https://open-meteo.com) (gratis, tanpa API key). Cari nama kota sekali; diperbarui
+    tiap 15 menit. Browser mengirim koordinat kota (dibulatkan ±1 km) ke Open-Meteo. Data lebih dari 3 jam dianggap
+    tidak tersedia.
+  - *Manual*: cerah / berawan / hujan / badai petir.
+  Pengaturan disimpan di browser. Hujan, awan, petir, dan genangan hanya tampil di luar gedung; lampu jalan menyala saat
+  malam atau hujan.
+- Arahkan kursor ke karakter untuk tooltip (nama, status, tugas aktif). Klik **karakter** atau **meja** untuk kartu
+  karyawan melayang: departemen, bisnis, status, tugas & progres subtugas (jika ada), provider/model AI, token, aktivitas
+  terakhir, riwayat (*Detail lengkap* membuka tab Detail).
+- Klik **ruangan** mana pun untuk kartu sesuai fungsinya di dalam kantor (CEO: ringkasan grup & approval; Finance: keuangan
+  bulan ini; Developer Lab: RAM, uptime, provider, error; HR: karyawan & beban kerja; Lounge: siapa yang sedang tidak
+  bertugas; dst.). Kartu hanya menampilkan data yang tercatat di sistem.
 - Notifikasi kecil muncul saat karyawan mulai bekerja, tugas selesai/gagal, rapat dimulai, atau ada approval baru.
 - Shared Services muncul di "Meja Tamu" kantor bisnis hanya saat sedang mengerjakan tugas bisnis itu.
 - Tombol **♪** menyalakan suara (ketikan & notifikasi). Suara selalu **mati** saat halaman dibuka dan tidak pernah autoplay.

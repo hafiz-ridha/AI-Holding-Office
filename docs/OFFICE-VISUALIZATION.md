@@ -130,3 +130,17 @@ Panel ruangan disegarkan tiap 10 detik (bukan tiap 2 detik) karena menggabungkan
 | `public/js/views/officePanels.js` | baru: panel per ruangan |
 | `public/css/app.css` | gaya pixel-art (status bar, panel, tooltip, notifikasi, minimap) |
 | `test/10-office-visual.test.js` | baru: tanpa tumpang tindih (3 skenario ukuran), meja deterministik, semua frame tersedia |
+
+## 5. Halaman depan, cuaca & tata letak (v4)
+
+| Bagian | Isi |
+|---|---|
+| Tata letak | Kanvas mengisi seluruh lebar di kiri kolom Obrolan/Detail, tingginya mengikuti viewport (sejajar dengan kolom obrolan). Minimap mati secara default. Klik ruangan/meja/karakter membuka kartu melayang di dalam kantor. |
+| Halaman depan | 10 tile di atas gedung: langit (3), jalan (2), trotoar (1), parkiran (4). Pintu masuk utama di ujung atas lorong kiri; karyawan baru masuk dari sini. |
+| Parkiran | Zona motor bergaris: dua baris skuter parkir tegak lurus saling membelakangi lorong (atas tampak belakang, bawah tampak depan), beberapa slot kosong, helm di jok/spion. Zona mobil: bay parkir paralel di sisi gedung, satu pickup double cabin lifted kuning (sudut 3/4 depan, sesuai referensi owner; pixel art orisinal tanpa logo), jalan masuk dari jalan raya (trotoar dipotong, tidak ada lampu/pohon di atasnya). Taman dengan pohon & semak. |
+| Waktu | Jam browser: gradasi langit pagi/siang/sore/malam, matahari 06–18 dan bulan 18–06 bergerak sesuai jam, bintang, jendela gedung kota menyala malam hari, lampu jalan menyala saat sore/malam/hujan. Cache langit diperbarui tiap menit. |
+| Cuaca | **Otomatis**: Open-Meteo (`api.open-meteo.com`, gratis, tanpa key) untuk kota yang dicari via `geocoding-api.open-meteo.com`; kode WMO → cerah/berawan/hujan/badai; diperbarui tiap 15 menit, data > 3 jam dianggap tidak tersedia. **Manual**: cerah/berawan/hujan/badai. Disimpan di `localStorage` browser. Efek: awan bergerak, hujan + cipratan + genangan, kilat saat badai (hanya di luar gedung), halaman lebih gelap saat mendung/hujan, cahaya jendela berkurang. |
+| Performa | Hujan dirender 15 FPS hanya saat halaman depan terlihat (≤170 garis, tanpa state partikel; posisi dari fungsi acak deterministik). Langit & pencahayaan di-cache. |
+
+Perubahan server (bukan logika bisnis): CSP `connect-src` mengizinkan dua domain Open-Meteo agar browser dapat mengambil
+cuaca otomatis. `Permissions-Policy: geolocation=()` tetap; lokasi dipilih lewat nama kota, bukan GPS.

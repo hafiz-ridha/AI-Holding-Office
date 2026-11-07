@@ -4,6 +4,8 @@
 // (no overlapping objects, desks/characters keep their positions).
 export const T = 16; // tile size (logical px)
 const HALL_W = 2; // vertical hallway on the left connects all corridors
+// Front yard above the building (tiles): sky 3, road 2, sidewalk 1, parking lot 4. Shows time of day and weather.
+export const YARD_H = 10;
 
 const ROLE_ROOM = { group_finance: 'finance', finance: 'finance', secretary: 'reception', researcher: 'research', developer: 'dev', hr: 'hr', marketing: 'marketing' };
 const ROLE_DESK = { marketing: 'desk_mkt', finance: 'desk_fin', group_finance: 'desk_fin', secretary: 'desk_rec', researcher: 'desk_res', developer: 'desk_dev', hr: 'desk_hr', business_manager: 'desk_bm' };
@@ -13,7 +15,7 @@ const ROOM_DESK = { bm: 'desk_bm', finance: 'desk_fin', reception: 'desk_rec', r
 function layoutBands(bands, mapW) {
   const rooms = [];
   const corridors = [];
-  let y = 0;
+  let y = YARD_H;
   for (const band of bands) {
     let used = HALL_W;
     band.forEach((r, i) => {
@@ -38,6 +40,130 @@ function layoutBands(bands, mapW) {
 
 function door(room) {
   return { x: (room.x + room.w / 2) * T, y: (room.y + room.h) * T - 10, corridorY: (room.y + room.h) * T + T };
+}
+
+// Front yard: road, sidewalk with street lamps and trees, a parking lot laid out like a real office lot and a
+// walkway to the main entrance (top of the left hallway):
+//  - motor zone: scooters parked perpendicular in two rows facing away from a shared aisle (top row seen from
+//    behind, bottom row from the front), a few empty spots, helmets on some seats/mirrors;
+//  - car zone: marked parallel bays along the building, a driving aisle and a driveway from the road,
+//    one lifted off-road double-cabin pickup (3/4 front view);
+//  - a small lawn with trees and bushes.
+// Decoration only: vehicles do not represent employees. Objects never overlap (checked by findCollisions).
+function buildYard(mapW, size, { title, motorCols }) {
+  const W = mapW * T;
+  const yard = {
+    h: YARD_H * T,
+    sky: { y: 0, h: 3 * T },
+    road: { y: 3 * T, h: 2 * T },
+    walk: { y: 5 * T, h: T },
+    lot: { y: 6 * T, h: 4 * T },
+    entry: { x: 0, w: HALL_W * T },
+    objects: [], // static sprites (vehicles, lamps, signs, bushes) drawn into the background
+    decals: [], // drawn on top of objects: helmets on bikes (not part of the overlap check)
+    paint: [], // white parking lines
+    trees: [], // drawn as ambient (they sway)
+    lamps: [], // lamp heads for night lighting
+    lawn: null,
+    driveway: null,
+    puddles: [],
+  };
+  const top = yard.lot.y;
+  const bottom = yard.lot.y + yard.lot.h;
+  const put = (f, x, y, extra = {}) => {
+    const s = size(f);
+    const o = { f, x: Math.round(x), y: Math.round(y), w: s.w, h: s.h, ...extra };
+    yard.objects.push(o);
+    return o;
+  };
+  const line = (x, y, w, h) => yard.paint.push({ x: Math.round(x), y: Math.round(y), w, h });
+  // Building name on a plank beside the entrance walkway (sidewalk).
+  const signW = Math.min(170, Math.round(title.length * 5.4) + 22);
+  yard.sign = { x: HALL_W * T + 6, y: yard.walk.y + 2, w: signW, h: 12, name: title };
+
+  // ---- motor zone ----
+  const mz = { x: HALL_W * T + 8, w: motorCols * 13 + 6 };
+  line(mz.x, top + 1, mz.w, 1);
+  line(mz.x, bottom - 2, mz.w, 1);
+  line(mz.x, top + 1, 1, yard.lot.h - 2);
+  line(mz.x + mz.w - 1, top + 1, 1, yard.lot.h - 2);
+  const COLORS = ['red', 'blue', 'black', 'white', 'yellow'];
+  const rowA = [1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0];
+  const rowB = [1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1];
+  for (let i = 0; i < motorCols; i++) {
+    const x = mz.x + 4 + i * 13 + (((i * 7) % 3) - 1) * 0.5;
+    if (rowA[i % rowA.length]) {
+      const b = put(`motor_r_${COLORS[(i * 2 + 1) % 5]}`, x, top + 3, { vehicle: true });
+      if (i % 3 === 0) yard.decals.push({ f: 'helmet', x: b.x + 3, y: b.y + 4 });
+    }
+    if (rowB[i % rowB.length]) {
+      const b = put(`motor_f_${COLORS[(i * 3 + 2) % 5]}`, x, bottom - 3 - 22, { vehicle: true });
+      if (i % 4 === 1) yard.decals.push({ f: 'helmet_w', x: b.x + 7, y: b.y });
+    }
+  }
+
+  // ---- car zone: parallel bays along the building, driving aisle + driveway on the road side ----
+  put('p_sign', mz.x + mz.w + 3, top + 2);
+  const car = size('raptor');
+  const bayW = car.w + 8;
+  const bayH = car.h + 4;
+  const cz = { x: mz.x + mz.w + 20 };
+  const nBays = Math.max(1, Math.min(4, Math.floor((W - cz.x - 110) / bayW)));
+  cz.w = nBays * bayW;
+  const bayTop = bottom - 2 - bayH;
+  line(cz.x, bayTop, cz.w + 1, 1); // bay edge toward the aisle
+  line(cz.x, bottom - 2, cz.w + 1, 1);
+  for (let i = 0; i <= nBays; i++) line(cz.x + i * bayW, bayTop, 1, bayH); // bay separators
+  yard.driveway = { x: cz.x + Math.round(bayW / 2), w: bayW };
+  const carBay = Math.min(1, nBays - 1);
+  put('raptor', cz.x + carBay * bayW + 4, bottom - 3 - car.h, { vehicle: true });
+
+  // ---- lawn with trees and bushes ----
+  const lx = cz.x + cz.w + 12;
+  if (W - 6 - lx >= 40) {
+    yard.lawn = { x: lx, y: top + 4, w: W - 6 - lx, h: yard.lot.h - 8 };
+    const tree = size('tree');
+    const bush = size('bush');
+    let tx = lx + 6;
+    let n = 0;
+    while (tx + tree.w <= yard.lawn.x + yard.lawn.w - 4) {
+      if (n % 2 === 0) yard.trees.push({ type: 'plant', f: 'tree', x: tx, y: bottom - 6 - tree.h, w: tree.w, h: tree.h, z: bottom - 6 });
+      else {
+        put('bush', tx + 2, bottom - 8 - bush.h);
+        if (tx + 6 + bush.w <= yard.lawn.x + yard.lawn.w - 4) put('bush', tx + 4, top + 8);
+      }
+      tx += n % 2 === 0 ? tree.w + 8 : bush.w + 14;
+      n++;
+    }
+  }
+
+  // ---- street lamps and trees on the sidewalk (right of the sign, never on the driveway) ----
+  const lamp = size('lamp_post');
+  const tree = size('tree');
+  let sx = yard.sign.x + signW + 18;
+  let k = 0;
+  const dw = yard.driveway;
+  while (sx + tree.w < W - 8) {
+    const w = k % 2 === 0 ? lamp.w : tree.w;
+    if (sx + w > dw.x - 4 && sx < dw.x + dw.w + 4) {
+      sx = dw.x + dw.w + 8;
+      continue;
+    }
+    if (k % 2 === 0) {
+      const o = put('lamp_post', sx, yard.walk.y + yard.walk.h - lamp.h);
+      yard.lamps.push({ x: o.x + 8, y: o.y + 4, gx: o.x + 5, gy: yard.lot.y + 6 });
+      sx += lamp.w + 70;
+    } else {
+      yard.trees.push({ type: 'plant', f: 'tree', x: sx, y: yard.walk.y + yard.walk.h - tree.h + 2, w: tree.w, h: tree.h, z: yard.walk.y + yard.walk.h + 2 });
+      sx += tree.w + 70;
+    }
+    k++;
+  }
+  // Where rain water collects (drawn only while it rains).
+  for (let i = 0; i < 7; i++) {
+    yard.puddles.push({ x: Math.round(((i * 0.37 + 0.11) % 1) * (W - 60)) + 30, y: i % 2 ? yard.road.y + 8 + (i % 3) * 6 : yard.lot.y + 6 + (i % 3) * 3, w: 14 + (i % 3) * 6 });
+  }
+  return yard;
 }
 
 // Desk geometry (desk 32x20, monitor on top, chair below, idle spot to the right).
@@ -305,6 +431,8 @@ function finishScene(base, extra, size) {
   });
   // Server racks blink (ambient) — they are static furniture plus a dynamic LED overlay.
   for (const p of props) if (p.f === 'server_rack') ambient.push({ type: 'rack', x: p.x, y: p.y });
+  scene.yard = buildYard(scene.mapW, size, { title: scene.business?.name || 'AI Virtual Holding', motorCols: scene.business ? 7 : 10 });
+  ambient.push(...scene.yard.trees);
   Object.assign(scene, { walls, props, rugs, ambient, extras, restSeats });
   scene.collisions = () => findCollisions(scene);
   return scene;
@@ -314,7 +442,8 @@ function finishScene(base, extra, size) {
 export function findCollisions(scene) {
   const items = [
     ...scene.props.map((p) => ({ name: p.f, r: p })),
-    ...scene.ambient.filter((a) => a.type === 'plant').map((a) => ({ name: a.f, r: { x: a.x, y: a.y, w: a.f === 'plant_big' ? 16 : 12, h: a.f === 'plant_big' ? 28 : 14 } })),
+    ...scene.ambient.filter((a) => a.type === 'plant').map((a) => ({ name: a.f, r: { x: a.x, y: a.y, w: a.w ?? (a.f === 'plant_big' ? 16 : 12), h: a.h ?? (a.f === 'plant_big' ? 28 : 14) } })),
+    ...(scene.yard ? [...scene.yard.objects.map((o) => ({ name: `yard:${o.f}`, r: o })), { name: 'yard:sign', r: scene.yard.sign }] : []),
     ...[...scene.desks, ...scene.visitorDesks].map((d) => ({ name: `desk:${d.owner ?? '-'}`, r: { x: d.x - 1, y: d.y - 6, w: d.w + 2, h: 40 } })),
   ];
   const out = [];
@@ -387,7 +516,7 @@ export function buildHQScene(data, size) {
     meeting,
     visitorDesks: [],
     visitorFilter: () => false,
-    entrance: { x: T, y: base.corridors[0].y * T + T },
+    entrance: { x: T, y: YARD_H * T + 8 }, // main door at the top of the hallway (front yard side)
   }, size);
 }
 
@@ -428,7 +557,7 @@ export function buildBusinessScene(data, business, size) {
     visitorDesks,
     // Shared services appear here only while they actually work/meet for this business.
     visitorFilter: (e) => e.org_unit === 'shared' && !e.business_ids?.includes(business.id) && (e.visiting_business_id === business.id || (e.meeting?.scope === 'business' && e.meeting.business_id === business.id)),
-    entrance: { x: T, y: base.corridors[0].y * T + T },
+    entrance: { x: T, y: YARD_H * T + 8 }, // main door at the top of the hallway (front yard side)
   }, size);
 }
 

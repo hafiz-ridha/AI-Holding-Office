@@ -16,7 +16,9 @@ const CSP = [
   "style-src 'self'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self'",
+  // Open-Meteo (free, no key): optional automatic weather for the office front yard, fetched by the browser
+  // only when the owner enables "Cuaca otomatis" and sets a location.
+  "connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'self'",

@@ -669,6 +669,161 @@ bubble('bub_rest', '#e6f0ff', (g) => { g.r(3, 2, 4, 1, '#5b6b8c'); g.px(6, 3, '#
 def('doormat', 28, 6, (g) => { g.box(0, 0, 28, 6, '#8a6a50', '#5d4636'); for (let x = 2; x < 26; x += 3) g.r(x, 2, 1, 2, '#a8876a'); });
 def('sign_plank', 8, 13, (g) => { g.box(0, 0, 8, 13, '#9a6b43', '#5d3f26'); g.r(1, 1, 6, 1, '#b8885a'); g.r(1, 11, 6, 1, '#7a5233'); });
 
+// ---------------- front yard (v4): ground, vehicles, street furniture ----------------
+def('asphalt', 16, 16, (g) => {
+  g.r(0, 0, 16, 16, '#4a4f57');
+  for (const [x, y] of [[2, 3], [9, 1], [13, 7], [5, 10], [11, 13], [1, 14], [7, 6], [14, 2]]) g.px(x, y, '#585e67');
+  for (const [x, y] of [[4, 5], [12, 11], [8, 14], [0, 8]]) g.px(x, y, '#41454c');
+});
+def('paving', 16, 16, (g) => {
+  g.r(0, 0, 16, 16, '#cbc5ba');
+  g.r(0, 7, 16, 1, '#ada79b'); g.r(0, 15, 16, 1, '#ada79b'); g.r(7, 0, 1, 7, '#ada79b'); g.r(15, 8, 1, 7, '#ada79b');
+  g.r(0, 0, 7, 1, '#dad5cc'); g.r(0, 8, 15, 1, '#dad5cc');
+});
+// Scooters parked perpendicular to the aisle (3/4 top-down view), as in an Indonesian office motor park:
+// motor_r_* = seen from behind (tail light, black plate), motor_f_* = seen from the front (headlight, apron).
+const MOTOR_COLORS = [['red', '#c2413a', '#8f2e29'], ['blue', '#3f6fb5', '#2e5288'], ['black', '#3a3d44', '#24262b'], ['white', '#e6e4de', '#b9b6ae'], ['yellow', '#e0b03c', '#ab8327']];
+for (const [n, c, d] of MOTOR_COLORS) {
+  def(`motor_r_${n}`, 12, 22, (g) => {
+    g.r(2, 20, 8, 2, '#00000035');
+    g.r(0, 1, 12, 1, '#2b2b30'); g.r(0, 0, 2, 1, '#9aa0a8'); g.r(10, 0, 2, 1, '#9aa0a8'); // handlebar + mirrors
+    g.box(4, 1, 4, 3, c, P.ol); // front shield top
+    g.r(3, 4, 6, 6, '#2b2b30'); g.r(4, 5, 4, 1, '#45474f'); // seat
+    g.box(2, 9, 8, 7, c, P.ol); g.r(3, 10, 6, 1, '#ffffff38'); g.r(3, 14, 6, 1, d); // rear body
+    g.r(3, 12, 6, 1, '#d33a2c'); g.px(2, 12, '#f2a33a'); g.px(9, 12, '#f2a33a'); // tail light + signals
+    g.r(3, 15, 6, 2, '#1d1f23'); g.px(4, 16, P.white); g.px(6, 16, P.white); g.px(7, 15, P.white); // plate
+    g.r(4, 17, 4, 4, '#1d1f23'); g.r(5, 17, 1, 4, '#3a3d44'); // rear tire
+  });
+  def(`motor_f_${n}`, 12, 22, (g) => {
+    g.r(2, 20, 8, 2, '#00000035');
+    g.r(3, 0, 6, 3, '#2b2b30'); // seat (behind)
+    g.r(0, 4, 12, 1, '#2b2b30'); g.r(0, 2, 2, 2, '#9aa0a8'); g.r(10, 2, 2, 2, '#9aa0a8'); // handlebar + mirrors
+    g.box(2, 5, 8, 9, c, P.ol); g.r(3, 6, 6, 1, '#ffffff40'); g.r(3, 12, 6, 1, d); // apron
+    g.r(4, 7, 4, 2, '#fff2b8'); g.px(2, 8, '#f2a33a'); g.px(9, 8, '#f2a33a'); // headlight + signals
+    g.box(4, 13, 4, 3, c, P.ol); // front fender
+    g.r(4, 16, 4, 5, '#1d1f23'); g.r(5, 16, 1, 5, '#3a3d44'); // front tire
+  });
+}
+def('helmet', 6, 5, (g) => { g.r(1, 0, 4, 1, '#3a3d44'); g.r(0, 1, 6, 3, '#3a3d44'); g.r(1, 1, 3, 1, '#6b7078'); g.r(1, 4, 4, 1, '#1d1f23'); });
+def('helmet_w', 6, 5, (g) => { g.r(1, 0, 4, 1, '#e6e4de'); g.r(0, 1, 6, 3, '#e6e4de'); g.r(1, 1, 3, 1, P.white); g.r(1, 4, 4, 1, '#3a3d44'); });
+// Lifted off-road double-cabin pickup (yellow), 3/4 front-left view as in the owner's reference: black mesh grille,
+// dark headlights, black bumper with silver skid plate and red tow hook, black fender flares, four doors, short bed,
+// big all-terrain tires with grey rims, visible chassis under the raised body. Original pixel art, no brand logo.
+function fillPoly(g, pts, c) {
+  const ys = pts.map((p) => p[1]);
+  for (let y = Math.min(...ys); y <= Math.max(...ys); y++) {
+    const xs = [];
+    for (let i = 0; i < pts.length; i++) {
+      const [ax, ay] = pts[i];
+      const [bx, by] = pts[(i + 1) % pts.length];
+      const yc = y + 0.5;
+      if ((ay <= yc && by > yc) || (by <= yc && ay > yc)) xs.push(ax + ((yc - ay) * (bx - ax)) / (by - ay));
+    }
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) for (let x = Math.round(xs[k]); x < Math.round(xs[k + 1]); x++) g.px(x, y, c);
+  }
+}
+function ell(g, cx, cy, rx, ry, fn) {
+  for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
+    for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+      const d = ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2;
+      if (d <= 1) fn(x, y, d);
+    }
+  }
+}
+function offroadWheel(g, cx, cy, face) {
+  // tread ring with knobby checker, then the rim seen at an angle (shifted to the visible side)
+  ell(g, cx, cy, 6.2, 6.8, (x, y, d) => g.px(x, y, d > 0.72 ? ((x + y) % 2 ? '#111111' : '#3a3a3a') : '#1a1a1a'));
+  if (!face) return;
+  ell(g, cx + 1.5, cy, 2.6, 4.6, (x, y, d) => g.px(x, y, d > 0.6 ? '#8a8a8a' : (x + y) % 3 ? '#cfcfcf' : '#6b6b6b'));
+  g.px(Math.round(cx + 1.5), Math.round(cy), '#4a4a4a');
+}
+def('raptor', 64, 34, (g) => {
+  const Y = '#f2d23c', YL = '#f6e96a', YM = '#dcb52a', YD = '#b58a1c', O = '#111111', K = '#1b1b1d', KG = '#2e3035';
+  // shadow
+  for (let x = 3; x < 62; x++) { g.px(x, 32, '#00000040'); if (x > 6 && x < 59) g.px(x, 33, '#00000028'); }
+  // far front wheel (under the nose), chassis and suspension under the raised body
+  offroadWheel(g, 7, 25, false);
+  g.r(24, 21, 30, 3, K); g.r(26, 24, 26, 1, KG); g.r(36, 22, 6, 4, KG); g.r(44, 23, 3, 3, '#3a3d44');
+  // side body: doors (front 35..42, rear 43..50), lower crease, sill
+  fillPoly(g, [[27, 8], [51, 8], [51, 21], [27, 21]], Y);
+  g.r(27, 9, 24, 1, YL); g.r(27, 15, 24, 2, YM); g.r(27, 19, 24, 2, YD); g.r(27, 21, 24, 1, O);
+  g.r(42, 8, 1, 13, YD); g.r(35, 8, 1, 12, YD); // door shut lines
+  g.r(38, 11, 2, 1, YD); g.r(46, 11, 2, 1, YD); // handles
+  // short bed with tail light
+  fillPoly(g, [[50, 9], [61, 9], [61, 17], [50, 17]], Y); g.r(50, 9, 11, 1, YL); g.r(50, 8, 11, 1, O); g.r(61, 9, 1, 9, O);
+  g.r(60, 10, 1, 3, '#b8282a'); g.r(50, 15, 11, 2, YM);
+  // black fender flares (front and rear arches)
+  ell(g, 31, 17, 6.5, 6, (x, y) => { if (y <= 18) g.px(x, y, (y === 11 || y === 12) ? KG : K); });
+  ell(g, 56, 17, 6, 6, (x, y) => { if (y <= 18) g.px(x, y, (y === 11 || y === 12) ? KG : K); });
+  // cab: roof edge, windshield (sloped), side windows, B-pillar, mirror with amber marker
+  g.r(23, 0, 26, 1, O); g.r(23, 1, 26, 1, YL);
+  fillPoly(g, [[16, 8], [23, 1], [25, 1], [18, 8]], YL); // A-pillar
+  fillPoly(g, [[18, 7], [25, 2], [35, 2], [35, 7]], '#c9c9c9');
+  fillPoly(g, [[20, 6], [26, 2], [34, 2], [34, 4], [24, 5]], '#e3e3e3');
+  g.r(18, 7, 17, 1, '#8f8f8f');
+  g.r(35, 1, 1, 8, Y); // windshield / door pillar
+  g.r(36, 2, 6, 6, '#a9a9a9'); g.r(36, 2, 6, 2, '#c9c9c9');
+  g.r(42, 1, 2, 8, O); // B-pillar
+  g.r(44, 2, 5, 6, '#a9a9a9'); g.r(44, 2, 5, 2, '#c9c9c9');
+  fillPoly(g, [[49, 1], [50, 1], [52, 8], [50, 8]], Y); // C-pillar down to the bed
+  g.r(35, 4, 4, 3, O); g.r(36, 5, 2, 1, KG); g.px(37, 6, '#e2701b'); // mirror
+  // hood (slightly rising toward the windshield) and front fender top
+  fillPoly(g, [[3, 9], [9, 7], [26, 6], [28, 8], [27, 10], [3, 11]], Y);
+  g.r(6, 8, 18, 1, YL); g.r(10, 7, 12, 1, YL);
+  g.r(3, 9, 1, 3, O); g.r(3, 8, 6, 1, O); g.r(9, 6, 16, 1, O);
+  // front face: mesh grille with a horizontal bar, dark headlight with amber side marker
+  fillPoly(g, [[2, 10], [27, 10], [27, 16], [2, 16]], Y);
+  g.r(4, 11, 16, 5, K);
+  for (let x = 4; x < 20; x++) for (let y = 11; y < 16; y++) if ((x + y) % 2 === 0) g.px(x, y, '#4a4d54');
+  g.r(4, 13, 16, 1, KG); for (const x of [6, 10, 14]) g.r(x, 13, 2, 1, '#5d6068');
+  g.r(20, 11, 6, 3, KG); g.r(21, 12, 3, 1, '#bfc5cc'); g.px(25, 12, '#e2701b'); g.r(20, 14, 6, 1, '#4a4d54');
+  g.r(2, 10, 1, 7, O); g.r(2, 16, 26, 1, YD);
+  // big black bumper, fog lights, silver skid plate, red tow hook
+  fillPoly(g, [[1, 17], [28, 17], [27, 22], [3, 22]], K);
+  g.r(2, 17, 25, 1, KG); g.r(5, 18, 4, 1, '#3a3d44'); g.r(12, 18, 6, 1, '#3a3d44'); g.r(20, 18, 4, 1, '#3a3d44');
+  g.r(5, 20, 14, 2, '#d0d0d0'); g.r(6, 21, 12, 1, '#a9a9a9'); g.r(8, 20, 1, 1, '#6b6b6b'); g.r(12, 20, 1, 1, '#6b6b6b'); g.r(16, 20, 1, 1, '#6b6b6b');
+  g.r(10, 22, 2, 2, '#b8282a');
+  // near-side wheels (rims visible)
+  offroadWheel(g, 31, 25, true);
+  offroadWheel(g, 56, 25, true);
+});
+def('grass', 16, 16, (g) => {
+  g.r(0, 0, 16, 16, '#6aa55c');
+  for (const [x, y] of [[2, 2], [9, 1], [13, 6], [5, 9], [11, 12], [1, 13], [7, 5], [14, 14]]) { g.px(x, y, '#83bd6f'); g.px(x, y + 1, '#5a9450'); }
+});
+def('bush', 14, 10, (g) => {
+  g.r(2, 8, 10, 2, '#00000030');
+  for (let y = 0; y < 9; y++) for (let x = 0; x < 14; x++) {
+    const ex = (x - 6.5) / 7, ey = (y - 4.5) / 4.6;
+    const d = ex * ex + ey * ey;
+    if (d < 1) g.px(x, y, d > 0.75 ? '#2f5a2b' : ey < -0.2 ? '#7cb865' : '#4c8a45');
+  }
+});
+def('lamp_post', 10, 44, (g) => {
+  g.r(1, 42, 8, 2, '#00000033');
+  g.r(4, 6, 2, 36, '#3d434e'); g.r(4, 6, 1, 36, '#5d6573');
+  g.r(2, 39, 6, 4, '#3d434e');
+  g.r(5, 3, 4, 2, '#3d434e');
+  g.box(6, 2, 4, 4, '#d9dde3', '#3d434e');
+});
+for (const [name, dx] of [['tree', 0], ['tree_b', 1]]) {
+  def(name, 26, 36, (g) => {
+    g.r(5, 33, 16, 3, '#00000030');
+    g.r(11, 22, 4, 12, '#7a5233'); g.r(11, 22, 1, 12, '#8f6340');
+    for (let y = 0; y < 26; y++) for (let x = 0; x < 26; x++) {
+      const ex = (x - 12.5 - dx) / 12, ey = (y - 12) / 11.5;
+      const d = ex * ex + ey * ey;
+      if (d < 1) g.px(x, y, d > 0.82 ? '#2f5a2b' : ey < -0.3 && ex < 0.2 ? '#7cb865' : (x + y) % 5 === 0 ? '#4c8a45' : '#5f9e54');
+    }
+  });
+}
+def('p_sign', 12, 24, (g) => {
+  g.r(5, 10, 2, 13, '#5d6573'); g.r(3, 22, 6, 2, '#00000033');
+  g.box(0, 0, 12, 11, '#2f6fd0', P.white);
+  g.r(4, 2, 2, 7, P.white); g.r(6, 2, 2, 1, P.white); g.r(8, 3, 1, 2, P.white); g.r(6, 5, 2, 1, P.white);
+});
+
 // ---------------- pack (shelf packing, 2px padding) ----------------
 const PAD = 2;
 const W = 512;

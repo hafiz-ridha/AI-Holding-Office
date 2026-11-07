@@ -6,6 +6,7 @@ import { buildHQScene, buildBusinessScene, sceneKey } from '../office/scenes.js'
 import { OfficeEngine, dayPeriod } from '../office/engine.js';
 import { avatarCanvas } from '../office/sprites.js';
 import { createSound } from '../office/sound.js';
+import { KINDS, loadWeatherSettings, saveWeatherSettings, fetchCurrentWeather, searchPlaces, REFRESH_MS } from '../office/weather.js';
 import { createChat } from './chat.js';
 import { roomPanel } from './officePanels.js';
 
@@ -37,14 +38,17 @@ export async function render(root, [initial = 'hq'], ctx) {
   const sbItem = (k, label) => h('span', { class: 'os-item' }, h('small', null, label), (sb[k] = h('b', null, '–')));
   const statusBar = h('div', { class: 'office-status', role: 'status', 'aria-label': 'Status holding' },
     h('div', { class: 'os-brand' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), h('b', null, 'AI Virtual Holding'), (sb.clock = h('span', { class: 'os-clock' }))),
-    h('div', { class: 'os-stats' }, sbItem('emp', 'Karyawan'), sbItem('working', 'Bekerja'), sbItem('active', 'Tugas aktif'), sbItem('done', 'Selesai hari ini'), sbItem('biz', 'Bisnis'),
+    h('div', { class: 'os-stats' },
+      h('button', { class: 'os-item os-btn', type: 'button', title: 'Atur cuaca: otomatis atau manual', onclick: () => openFloat({ kind: 'weather' }, 0) }, h('small', null, 'Cuaca'), (sb.wx = h('b', null, '–'))),
+      sbItem('emp', 'Karyawan'), sbItem('working', 'Bekerja'), sbItem('active', 'Tugas aktif'), sbItem('done', 'Selesai hari ini'), sbItem('biz', 'Bisnis'),
       (sb.sysWrap = h('span', { class: 'os-item os-sys', dataset: { level: 'ok' } }, h('small', null, 'Sistem'), (sb.sys = h('b', null, '–'))))));
 
   // ---- overlays inside the canvas frame ----
   const tip = h('div', { class: 'office-tip px', hidden: true, role: 'tooltip' });
   const float = h('div', { class: 'office-float', hidden: true, role: 'dialog', 'aria-label': 'Informasi karyawan' });
   const notes = h('div', { class: 'office-notes', 'aria-live': 'polite' });
-  const minimap = h('canvas', { class: 'office-minimap', 'aria-label': 'Minimap: klik untuk memindahkan kamera', hidden: window.innerWidth < 760 });
+  // Minimap is off by default; the "Peta" button shows it.
+  const minimap = h('canvas', { class: 'office-minimap', 'aria-label': 'Minimap: klik untuk memindahkan kamera', hidden: true });
   const btnMap = h('button', { class: 'btn btn-sm', type: 'button', title: 'Tampilkan/sembunyikan minimap', 'aria-pressed': String(!minimap.hidden), onclick: () => {
     minimap.hidden = !minimap.hidden;
     btnMap.setAttribute('aria-pressed', String(!minimap.hidden));
@@ -65,6 +69,7 @@ export async function render(root, [initial = 'hq'], ctx) {
 
   const panel = h('aside', { class: 'office-panel card', 'aria-live': 'polite', hidden: true });
   const chat = createChat({ onAgentMessage: (m) => engine?.say(m.sender_employee_id, m.content) });
+  // Obrolan | Detail column on the right of the office (below it on narrow screens).
   let sideTab = 'chat';
   const tabChat = h('button', { class: 'office-tab active', type: 'button', onclick: () => showSide('chat') }, 'Obrolan');
   const tabInfo = h('button', { class: 'office-tab', type: 'button', onclick: () => { showSide('detail'); showPanel(); } }, 'Detail');
@@ -227,34 +232,173 @@ export async function render(root, [initial = 'hq'], ctx) {
     tip.style.top = `${Math.max(6, y)}px`;
   }
 
-  // ---- floating employee card ----
+  // ---- weather & time (front yard): automatic (Open-Meteo, chosen city) or manual ----
+  const wx = loadWeatherSettings();
+  let wxErr = null;
+  let wxBusy = false;
+  let wxQuery = '';
+  let wxResults = [];
+  function weatherNow() {
+    if (wx.mode === 'manual') return { kind: wx.manual, text: `${KINDS[wx.manual]} (manual)` };
+    if (!wx.place) return { kind: 'cerah', text: 'Atur lokasi' };
+    const l = wx.last;
+    // Never show stale data as current: older than 3 hours counts as unavailable.
+    if (!l || l.place !== wx.place.name || Date.now() - l.at > 3 * 3600 * 1000) return { kind: 'cerah', text: wxErr ? 'Tidak tersedia' : 'Memuat…' };
+    return { kind: l.kind, text: `${l.label} ${l.temp}°C` };
+  }
+  function applyWeather() {
+    const w = weatherNow();
+    engine.setWeather(w.kind);
+    sb.wx.textContent = w.text;
+    if (!float.hidden && float.dataset.kind === 'weather') renderWeatherCard();
+  }
+  async function refreshWeather(force = false) {
+    if (wx.mode !== 'auto' || !wx.place || wxBusy) return;
+    const fresh = wx.last && wx.last.place === wx.place.name && Date.now() - wx.last.at < REFRESH_MS;
+    if (fresh && !force) return;
+    if (!force && wxErr && Date.now() - (refreshWeather.failedAt || 0) < 60000) return; // retry at most once a minute
+    wxBusy = true;
+    applyWeather();
+    try {
+      wx.last = { ...(await fetchCurrentWeather(wx.place)), place: wx.place.name };
+      wxErr = null;
+      saveWeatherSettings(wx);
+    } catch (e) {
+      wxErr = e.message;
+      refreshWeather.failedAt = Date.now();
+    } finally {
+      wxBusy = false;
+      applyWeather();
+    }
+  }
+  async function searchCity() {
+    const q = wxQuery.trim();
+    if (q.length < 2) return;
+    wxErr = null;
+    wxResults = [];
+    try {
+      wxResults = await searchPlaces(q);
+      if (!wxResults.length) wxErr = `Kota "${q}" tidak ditemukan`;
+    } catch (e) {
+      wxErr = e.message;
+    }
+    renderWeatherCard();
+  }
+  function renderWeatherCard() {
+    if (float.hidden || float.dataset.kind !== 'weather') return;
+    const now = new Date();
+    const w = weatherNow();
+    const modeBtn = (m, label) => h('button', {
+      class: `btn btn-sm ${wx.mode === m ? 'btn-primary' : ''}`, type: 'button', 'aria-pressed': String(wx.mode === m),
+      onclick: () => {
+        wx.mode = m;
+        wxErr = null;
+        saveWeatherSettings(wx);
+        applyWeather();
+        refreshWeather();
+      },
+    }, label);
+    const input = h('input', { type: 'search', placeholder: 'Nama kota, mis. Jakarta', value: wxQuery, 'aria-label': 'Cari kota', oninput: (e) => (wxQuery = e.target.value), onkeydown: (e) => e.key === 'Enter' && searchCity() });
+    const auto = [
+      h('div', { class: 'small' }, 'Lokasi: ', h('b', null, wx.place ? wx.place.name : 'belum diatur')),
+      h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, input, h('button', { class: 'btn btn-sm', type: 'button', onclick: searchCity }, 'Cari')),
+      wxResults.length ? h('div', { class: 'stack-xs' }, wxResults.map((p) => h('button', {
+        class: 'office-biz-link', type: 'button',
+        onclick: () => {
+          wx.place = p;
+          wx.last = null;
+          wxResults = [];
+          wxErr = null;
+          saveWeatherSettings(wx);
+          refreshWeather(true);
+        },
+      }, p.name))) : null,
+      wxBusy ? h('div', { class: 'small muted' }, 'Mengambil cuaca dari Open-Meteo…') : null,
+      wx.place && wx.last && wx.last.place === wx.place.name ? h('div', { class: 'small' }, `Sekarang: ${wx.last.label}, ${wx.last.temp}°C · diperbarui ${fmtRel(wx.last.at)}`) : null,
+      wxErr ? h('p', { class: 'small', style: { color: 'var(--err)', margin: 0 } }, wxErr) : null,
+      h('p', { class: 'small muted', style: { margin: 0 } }, 'Sumber: Open-Meteo (gratis, tanpa API key). Koordinat kota (dibulatkan ±1 km) dikirim ke Open-Meteo; diperbarui tiap 15 menit.'),
+    ];
+    const manual = [
+      h('div', { class: 'small muted' }, 'Cuaca yang ditampilkan di halaman depan:'),
+      h('div', { class: 'row' }, Object.entries(KINDS).map(([k, l]) => h('button', {
+        class: `btn btn-sm ${wx.manual === k ? 'btn-primary' : ''}`, type: 'button', 'aria-pressed': String(wx.manual === k),
+        onclick: () => {
+          wx.manual = k;
+          saveWeatherSettings(wx);
+          applyWeather();
+        },
+      }, l))),
+    ];
+    mount(float, floatClose(), h('div', { class: 'stack-sm' },
+      h('div', { class: 'room-head', style: { '--c': '#5fb2ec' } }, h('h3', null, 'Cuaca & waktu'),
+        h('div', { class: 'small muted' }, `${now.toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })} · ${PERIOD[dayPeriod(now)]} (jam browser)`)),
+      h('div', { class: 'small' }, 'Ditampilkan: ', h('b', null, w.text)),
+      h('div', { class: 'row' }, modeBtn('auto', 'Otomatis'), modeBtn('manual', 'Manual')),
+      wx.mode === 'auto' ? auto : manual,
+      h('p', { class: 'small muted', style: { margin: 0 } }, 'Pengaturan cuaca disimpan di browser ini.')));
+  }
+
+  // ---- floating card inside the office: employee (character/desk click) or room (room click) ----
   let floatSeq = 0;
+  let floatRoom = null;
+  let floatAt = 0;
   function selectEmployee(id, fromList = false) {
     const c = engine.chars.get(id);
-    selection = { type: 'employee', id };
-    engine.selected = selection;
+    engine.selected = { type: 'employee', id };
     if (c && fromList) engine.focusOn(c.x, c.y - 12);
     engine.draw(performance.now());
     const sx = c ? (c.x - engine.cam.x) * engine.scale : 0;
-    openFloat(id, sx);
-    if (sideTab === 'detail') showPanel();
+    openFloat({ kind: 'employee', id }, sx);
+    // The Detail panel follows the clicked employee when it is already showing an employee.
+    if (selection?.type === 'employee' && selection.id !== id) {
+      selection = { type: 'employee', id };
+      showPanel();
+    }
   }
-  function openFloat(id, sx) {
-    float.dataset.id = String(id);
+  function openFloat(target, sx) {
+    floatRoom = target.kind === 'room' ? target.room : null;
+    float.dataset.kind = target.kind;
+    if (target.kind === 'employee') float.dataset.id = String(target.id);
+    else delete float.dataset.id;
     float.dataset.side = sx > wrap.clientWidth / 2 ? 'left' : 'right';
+    float.setAttribute('aria-label', floatRoom ? `Ruangan ${floatRoom.name}` : target.kind === 'weather' ? 'Cuaca dan waktu' : 'Informasi karyawan');
     float.hidden = false;
+    float.scrollTop = 0;
     tip.hidden = true;
     mount(float, h('p', { class: 'small muted', style: { margin: 0 } }, 'Memuat…'));
     renderFloat();
   }
   function closeFloat() {
     float.hidden = true;
+    floatRoom = null;
     delete float.dataset.id;
+    if (engine) {
+      engine.selected = null;
+      engine.draw(performance.now());
+    }
   }
+  const floatClose = () => h('button', { class: 'float-x float-close', type: 'button', 'aria-label': 'Tutup', onclick: closeFloat }, '×');
+  const roomEnv = (room) => ({
+    data, scene: engine.scene, room, business: engine.scene.business || null, chars: engine.chars, ctx,
+    shownState, stateBadge, selectEmployee: (id) => selectEmployee(id, true), switchTo, overview: () => loadOverview(), meetingPanel, businessSummary,
+  });
   async function renderFloat() {
-    const id = Number(float.dataset.id);
-    if (!id || float.hidden) return;
+    if (float.hidden) return;
+    if (float.dataset.kind === 'weather') return renderWeatherCard();
     const seq = ++floatSeq;
+    floatAt = Date.now();
+    if (floatRoom) {
+      const room = floatRoom;
+      try {
+        const node = await roomPanel(roomEnv(room));
+        if (seq === floatSeq && floatRoom === room) mount(float, floatClose(), node);
+      } catch (e) {
+        if (seq === floatSeq) mount(float, floatClose(), h('p', { class: 'form-error' }, e.message));
+      }
+      return;
+    }
+    const id = Number(float.dataset.id);
+    if (!id) return;
     try {
       const d = await get(`/api/office/employees/${id}`);
       const cur = d.active_tasks[0] || null;
@@ -267,7 +411,7 @@ export async function render(root, [initial = 'hq'], ctx) {
       if (seq !== floatSeq || Number(float.dataset.id) !== id) return;
       mount(float, floatCard(d, cur, progress));
     } catch (e) {
-      if (seq === floatSeq) mount(float, h('p', { class: 'form-error' }, e.message));
+      if (seq === floatSeq) mount(float, floatClose(), h('p', { class: 'form-error' }, e.message));
     }
   }
   function floatCard(d, cur, progress) {
@@ -281,7 +425,7 @@ export async function render(root, [initial = 'hq'], ctx) {
     return h('div', { class: 'stack-sm' },
       h('div', { class: 'row', style: { alignItems: 'flex-start' } }, avatarCanvas(e.avatar, 2),
         h('div', { class: 'grow' }, h('h3', null, e.name), h('div', { class: 'small muted' }, e.role)),
-        h('button', { class: 'float-x', type: 'button', 'aria-label': 'Tutup', onclick: () => { closeFloat(); selection = null; engine.selected = null; engine.draw(performance.now()); } }, '×')),
+        h('button', { class: 'float-x', type: 'button', 'aria-label': 'Tutup', onclick: closeFloat }, '×')),
       h('div', null, stateBadge(st), ' ', h('span', { class: 'small' }, STATE[st]?.text || '')),
       d.state?.reason ? h('p', { class: 'small', style: { color: 'var(--err)', margin: 0 } }, d.state.reason) : null,
       h('dl', { class: 'kv small' },
@@ -297,24 +441,35 @@ export async function render(root, [initial = 'hq'], ctx) {
       h('div', { class: 'small muted' }, 'Riwayat tugas'),
       d.recent_tasks.length ? h('div', { class: 'list' }, d.recent_tasks.slice(0, 3).map((t) => h('div', { class: 'list-item small' }, h('a', { class: 'grow', href: `#/task/${t.id}` }, `${taskCode(t.id)} ${t.title}`), badge(t.status)))) : h('p', { class: 'small muted', style: { margin: 0 } }, 'Belum ada riwayat.'),
       h('div', { class: 'row' },
-        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => { selection = { type: 'employee', id: e.id }; showSide('detail'); showPanel(); } }, 'Detail lengkap'),
+        h('button', { class: 'btn btn-sm', type: 'button', onclick: () => {
+          selection = { type: 'employee', id: e.id };
+          showSide('detail');
+          showPanel();
+          panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } }, 'Detail lengkap'),
         h('button', { class: 'btn btn-sm btn-primary', type: 'button', onclick: () => ctx.openNewTask({ mode: 'direct', employee_id: e.id }) }, '+ Tugas')));
   }
 
   engine = new OfficeEngine(canvas, {
     atlas,
     onHover,
+    // Clicks open a card inside the office (visible without scrolling); the Detail panel below keeps the summary.
     onSelect: (sel) => {
-      if (sel?.type === 'employee') return selectEmployee(sel.id);
+      if (sel?.type === 'employee' || sel?.type === 'desk') return selectEmployee(sel.id);
+      if (sel?.type === 'room') return openFloat({ kind: 'room', room: sel.room }, sel.sx);
+      if (sel?.type === 'yard') return openFloat({ kind: 'weather' }, sel.sx);
       closeFloat();
-      selection = sel;
-      if (sel) showSide('detail');
-      showPanel();
     },
   });
   sound.setTypingSource(() => engine.anyVisible((c) => c.state === 'working' && !c.path.length));
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) engine.setAmbient(false);
   engine.attachMinimap(minimap);
+  // Wide screens: the canvas fills the viewport height next to the chat column (no empty space beside it).
+  engine.maxHeight = () => {
+    if (window.innerWidth <= 1100) return Math.round(window.innerHeight * 0.72);
+    const top = wrap.getBoundingClientRect().top + window.scrollY;
+    return Math.max(360, Math.round(window.innerHeight - top - legend.offsetHeight - 28));
+  };
 
   function sceneFor(id) {
     const key = sceneKey(data, id);
@@ -379,7 +534,6 @@ export async function render(root, [initial = 'hq'], ctx) {
     updateStatusBar();
     detectChanges();
     chat.setData(data);
-    if (!selection && sideTab === 'detail') showPanel(true);
   }
 
   // ---------------- panels ----------------
@@ -388,7 +542,7 @@ export async function render(root, [initial = 'hq'], ctx) {
   async function showPanel(quiet = false) {
     const seq = ++panelSeq;
     panelAt = Date.now();
-    const back = h('button', { class: 'btn btn-sm btn-ghost', type: 'button', onclick: () => { selection = null; engine.selected = null; closeFloat(); engine.draw(performance.now()); showPanel(); } }, '← Ringkasan kantor');
+    const back = h('button', { class: 'btn btn-sm btn-ghost', type: 'button', onclick: () => { selection = null; showPanel(); } }, '← Ringkasan kantor');
     try {
       if (!selection) {
         const node = current === 'hq' ? hqSummary() : await businessSummary();
@@ -502,17 +656,22 @@ export async function render(root, [initial = 'hq'], ctx) {
   data = await get('/api/office');
   await Promise.all([loadHistory().catch(() => {}), loadOverview(true)]);
   switchTo(initial.startsWith('biz-') ? initial : 'hq');
+  applyWeather();
+  refreshWeather();
   updateStatusBar();
   detectChanges();
   engine.start();
   ctx.poll(async () => {
     await refresh();
     await chat.poll().catch(() => {});
-    if (!float.hidden) renderFloat();
-    // Room panels aggregate several endpoints: refresh them less often than the 2 s office poll.
-    if (selection && sideTab === 'detail' && (selection.type !== 'room' || Date.now() - panelAt > 10000)) showPanel(true);
+    // Room cards and office summaries aggregate several endpoints: refresh them every 10 s instead of every 2 s.
+    if (!float.hidden && float.dataset.kind !== 'weather' && (!floatRoom || Date.now() - floatAt > 10000)) renderFloat();
+    refreshWeather(); // only fetches when the automatic reading is older than 15 minutes
+    if (!panel.hidden && (selection || Date.now() - panelAt > 10000)) showPanel(true);
   }, 2000);
   const ro = new ResizeObserver(() => engine.resize());
+  const onWinResize = () => engine.resize();
+  window.addEventListener('resize', onWinResize);
   ro.observe(wrap);
   // Pause rendering when the tab is hidden or the canvas is scrolled out of view.
   let onScreen = true;
@@ -531,6 +690,7 @@ export async function render(root, [initial = 'hq'], ctx) {
     engine.stop();
     sound.destroy();
     ro.disconnect();
+    window.removeEventListener('resize', onWinResize);
     io.disconnect();
     document.removeEventListener('visibilitychange', onVis);
     document.removeEventListener('keydown', onKey);

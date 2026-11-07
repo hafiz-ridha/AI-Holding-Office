@@ -28,6 +28,28 @@ function hexA(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
+// Blend two #rrggbb colors (t = 0 -> a, 1 -> b); returns #rrggbb.
+function mixHex(a, b, t) {
+  const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * Math.min(1, Math.max(0, t))).toString(16).padStart(2, '0')).join('')}`;
+}
+
+// Deterministic pseudo-random in [0, 1): same scene always looks the same, no stored particle state.
+function rnd(i) {
+  const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+// Filled pixel disc (sun, moon).
+function disc(g, cx, cy, r, color) {
+  g.fillStyle = color;
+  for (let y = -r; y <= r; y++) {
+    const w = Math.floor(Math.sqrt(r * r - y * y + r * 0.6));
+    g.fillRect(cx - w, cy + y, w * 2 + 1, 1);
+  }
+}
+
 export class OfficeEngine {
   constructor(canvas, { atlas, onSelect, onHover }) {
     this.canvas = canvas;
@@ -52,7 +74,19 @@ export class OfficeEngine {
     this.light = null;
     this.system = { level: 'ok' };
     this.minimap = null;
+    this.weather = 'cerah'; // cerah | berawan | hujan | badai (set by the page: automatic or manual)
+    this.sky = null;
+    this.skyKey = '';
     this.bindInput();
+  }
+
+  setWeather(kind) {
+    const k = ['cerah', 'berawan', 'hujan', 'badai'].includes(kind) ? kind : 'cerah';
+    if (k === this.weather) return;
+    this.weather = k;
+    if (this.scene) this.light = this.renderLighting(this.scene, this.period);
+    this.skyKey = '';
+    this.draw(performance.now());
   }
 
   // Show what an agent just said in the chat above its character for a few seconds.
@@ -136,10 +170,12 @@ export class OfficeEngine {
     const g = c.getContext('2d');
     g.imageSmoothingEnabled = false;
     const A = this.atlas;
-    // Corridors & hallway: warm tiles with a runner rug.
-    for (let y = 0; y < s.mapH; y++) for (let x = 0; x < s.mapW; x++) A.draw(g, 'floor_warm', x * T, y * T);
+    const yh = s.yard ? s.yard.h : 0;
+    // Corridors & hallway: warm tiles with a runner rug (inside the building, below the front yard).
+    for (let y = yh / T; y < s.mapH; y++) for (let x = 0; x < s.mapW; x++) A.draw(g, 'floor_warm', x * T, y * T);
     for (const cor of s.corridors) this.rug(g, { x: 2 * T + 4, y: cor.y * T + 8, w: (s.mapW - 2) * T - 8, h: 16, color: 'blue' });
-    this.rug(g, { x: 8, y: 2 * T, w: 16, h: (s.mapH - 3) * T, color: 'blue' });
+    this.rug(g, { x: 8, y: yh + T, w: 16, h: (s.mapH - 1) * T - yh - T, color: 'blue' });
+    if (s.yard) this.renderYard(g, s);
     // Room floors + identity tint.
     for (const r of s.rooms) {
       const f = FLOOR[r.floor] || 'floor_wood';
@@ -239,19 +275,265 @@ export class OfficeEngine {
     return c;
   }
 
-  // Day/night lighting overlay, cached per scene + period (browser local time).
+  // ---------------- front yard ----------------
+  renderYard(g, s) {
+    const A = this.atlas;
+    const y = s.yard;
+    const W = s.mapW * T;
+    const tiles = (f, y0, h, x0 = 0, w = W) => {
+      for (let ty = y0; ty < y0 + h; ty += T) for (let x = x0; x < x0 + w; x += T) A.draw(g, f, x, ty);
+    };
+    // Road with edge lines and dashed center line.
+    tiles('asphalt', y.road.y, y.road.h);
+    g.fillStyle = '#d9dcd5';
+    g.fillRect(0, y.road.y + 1, W, 1);
+    g.fillRect(0, y.road.y + y.road.h - 2, W, 1);
+    g.fillStyle = '#e8cf6a';
+    for (let x = 4; x < W; x += 20) g.fillRect(x, y.road.y + y.road.h / 2 - 1, 10, 2);
+    // Sidewalk with curb.
+    tiles('paving', y.walk.y, y.walk.h);
+    g.fillStyle = '#8f8a81';
+    g.fillRect(0, y.walk.y, W, 2);
+    g.fillStyle = '#b4afa5';
+    g.fillRect(0, y.walk.y, W, 1);
+    // Driveway from the road into the lot (curb cut through the sidewalk).
+    if (y.driveway) {
+      tiles('asphalt', y.walk.y, y.walk.h, y.driveway.x, y.driveway.w);
+      g.fillStyle = '#8f8a81';
+      g.fillRect(y.driveway.x - 2, y.walk.y, 2, y.walk.h);
+      g.fillRect(y.driveway.x + y.driveway.w, y.walk.y, 2, y.walk.h);
+    }
+    // Parking lot, walkway to the main entrance, lawn, painted lines.
+    tiles('asphalt', y.lot.y, y.lot.h);
+    tiles('paving', y.lot.y, y.lot.h, y.entry.x, y.entry.w);
+    if (y.lawn) {
+      const l = y.lawn;
+      g.save();
+      g.beginPath();
+      g.rect(l.x, l.y, l.w, l.h);
+      g.clip();
+      for (let ty = l.y; ty < l.y + l.h; ty += T) for (let x = l.x; x < l.x + l.w; x += T) A.draw(g, 'grass', x, ty);
+      g.restore();
+      g.fillStyle = '#b4afa5';
+      g.fillRect(l.x - 1, l.y - 1, l.w + 2, 1);
+      g.fillRect(l.x - 1, l.y + l.h, l.w + 2, 1);
+      g.fillRect(l.x - 1, l.y - 1, 1, l.h + 2);
+      g.fillRect(l.x + l.w, l.y - 1, 1, l.h + 2);
+    }
+    g.fillStyle = '#e6e6e0';
+    for (const p of y.paint) g.fillRect(p.x, p.y, p.w, p.h);
+    for (const d of y.decals) if (d.under) A.draw(g, d.f, d.x, d.y);
+    // Building edge with the main entrance (glass door frame, striped awning, doormat).
+    g.fillStyle = '#5d4636';
+    g.fillRect(y.entry.x + y.entry.w, y.h - 3, W - y.entry.w, 3);
+    g.fillRect(y.entry.x, y.h - 8, 3, 14);
+    g.fillRect(y.entry.x + y.entry.w - 3, y.h - 8, 3, 14);
+    g.fillStyle = 'rgba(159,208,234,0.55)';
+    g.fillRect(y.entry.x + 3, y.h - 2, y.entry.w - 6, 2);
+    for (let i = 0; i < y.entry.w; i += 4) {
+      g.fillStyle = (i / 4) % 2 ? '#f2eee4' : '#c2413a';
+      g.fillRect(y.entry.x + i, y.h - 12, 4, 5);
+    }
+    g.fillStyle = 'rgba(0,0,0,0.18)';
+    g.fillRect(y.entry.x, y.h - 7, y.entry.w, 2);
+    A.draw(g, 'doormat', y.entry.x + 2, y.h + 2);
+    // Building name plank on two legs beside the walkway.
+    const sg = y.sign;
+    g.fillStyle = '#5d3f26';
+    g.fillRect(sg.x + 6, sg.y + sg.h - 1, 2, 3);
+    g.fillRect(sg.x + sg.w - 8, sg.y + sg.h - 1, 2, 3);
+    g.fillRect(sg.x, sg.y, sg.w, sg.h);
+    g.fillStyle = '#9a6b43';
+    g.fillRect(sg.x + 1, sg.y + 1, sg.w - 2, sg.h - 2);
+    g.fillStyle = '#b8885a';
+    g.fillRect(sg.x + 1, sg.y + 1, sg.w - 2, 1);
+    // Vehicles, lamp posts, parking sign, bushes (sorted by depth), then helmets on bikes.
+    for (const o of [...y.objects].sort((a, b) => a.y + a.h - (b.y + b.h))) A.draw(g, o.f, o.x, o.y);
+    for (const d of y.decals) if (!d.under) A.draw(g, d.f, d.x, d.y);
+  }
+
+  // Sky band: gradient by time of day and weather, sun/moon at its real position, stars, distant skyline.
+  // Cached and re-rendered once a minute (or when the weather changes).
+  renderSky(s, d) {
+    const W = s.mapW * T;
+    const H = s.yard.sky.h;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    const p = dayPeriod(d);
+    const night = p === 'night';
+    const wx = this.weather;
+    const base = { morning: ['#7ec8f0', '#fcd9a8'], afternoon: ['#5fb2ec', '#c4e6f8'], evening: ['#3b4f8a', '#f2a065'], night: ['#0b1330', '#22305e'] }[p];
+    const veil = { cerah: null, berawan: ['#9aa5b1', 0.45], hujan: ['#5f6b78', 0.72], badai: ['#3f4652', 0.82] }[wx];
+    const col = (hex) => (veil ? mixHex(hex, veil[0], night ? veil[1] * 0.45 : veil[1]) : hex);
+    const top = col(base[0]);
+    const bottom = col(base[1]);
+    for (let y = 0; y < H; y += 4) {
+      g.fillStyle = mixHex(top, bottom, y / H);
+      g.fillRect(0, y, W, 4);
+    }
+    if (night && (wx === 'cerah' || wx === 'berawan')) {
+      g.fillStyle = '#ffffff';
+      const n = Math.round(W / (wx === 'cerah' ? 9 : 22));
+      for (let i = 0; i < n; i++) {
+        g.globalAlpha = 0.4 + rnd(i + 200) * 0.6;
+        g.fillRect(Math.round(rnd(i + 100) * W), Math.round(rnd(i + 150) * (H - 18)), 1, 1);
+      }
+      g.globalAlpha = 1;
+    }
+    // Sun 06:00–18:00 and moon 18:00–06:00 move across the sky with the browser clock.
+    const h = d.getHours() + d.getMinutes() / 60;
+    const day = h >= 6 && h < 18;
+    const t = day ? (h - 6) / 12 : ((h - 18 + 24) % 24) / 12;
+    const cx = Math.round(14 + t * (W - 28));
+    const cy = Math.round(H - 12 - Math.sin(Math.PI * t) * (H - 20));
+    if (wx === 'cerah' || wx === 'berawan') {
+      g.globalAlpha = wx === 'berawan' ? 0.55 : 1;
+      if (day) {
+        disc(g, cx, cy, 8, 'rgba(255,240,170,0.35)');
+        disc(g, cx, cy, 5, '#ffe27a');
+        disc(g, cx - 1, cy - 1, 2, '#fff6c8');
+      } else {
+        disc(g, cx, cy, 6, 'rgba(230,236,255,0.18)');
+        disc(g, cx, cy, 4, '#f1f0e3');
+        disc(g, cx + 2, cy - 1, 3, mixHex(top, bottom, cy / H));
+      }
+      g.globalAlpha = 1;
+    }
+    // Distant city skyline; windows light up in the evening/night.
+    const sky = { morning: '#9fb3c8', afternoon: '#93a8bd', evening: '#5d5272', night: '#151a30' }[p];
+    for (let x = 0, i = 0; x < W; i++) {
+      const bw = 14 + Math.round(rnd(i + 300) * 18);
+      const bh = 8 + Math.round(rnd(i + 350) * 14);
+      g.fillStyle = col(sky);
+      g.fillRect(x, H - bh, bw, bh);
+      for (let wy = H - bh + 3; wy < H - 2; wy += 4) {
+        for (let wxp = x + 2; wxp < x + bw - 2; wxp += 4) {
+          const lit = rnd(i * 31 + wy * 7 + wxp) > (night ? 0.55 : p === 'evening' ? 0.75 : 2);
+          g.fillStyle = lit ? '#f6d77a' : night ? '#20263f' : col('#b9c7d6');
+          g.fillRect(wxp, wy, 2, 2);
+        }
+      }
+      x += bw + 2;
+    }
+    return c;
+  }
+
+  drawClouds(ctx, s, sec) {
+    const W = s.mapW * T;
+    const H = s.yard.sky.h - 14;
+    const n = { cerah: 3, berawan: 7, hujan: 10, badai: 11 }[this.weather];
+    const base = { cerah: '#ffffff', berawan: '#e1e6ec', hujan: '#8f99a5', badai: '#5f6773' }[this.weather];
+    ctx.fillStyle = this.period === 'night' ? mixHex(base, '#1b2240', 0.6) : this.period === 'evening' ? mixHex(base, '#f2a065', 0.25) : base;
+    ctx.globalAlpha = this.weather === 'cerah' ? 0.85 : 0.95;
+    const t = this.ambientOn ? sec : 0;
+    for (let i = 0; i < n; i++) {
+      const w = 22 + rnd(i + 10) * 24;
+      const span = W + w + 20;
+      const x = ((rnd(i + 20) * span + t * (2 + rnd(i + 30) * 3)) % span) - w - 10;
+      const y = 2 + rnd(i + 40) * Math.max(4, H - 10);
+      ctx.fillRect(Math.round(x), Math.round(y + 4), Math.round(w), 6);
+      ctx.fillRect(Math.round(x + w * 0.18), Math.round(y + 1), Math.round(w * 0.45), 4);
+      ctx.fillRect(Math.round(x + w * 0.5), Math.round(y + 2), Math.round(w * 0.32), 3);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  raining() {
+    return this.weather === 'hujan' || this.weather === 'badai';
+  }
+
+  yardVisible() {
+    return Boolean(this.scene?.yard) && this.cam.y < this.scene.yard.h;
+  }
+
+  drawPuddles(ctx, s) {
+    for (const p of s.yard.puddles) {
+      ctx.fillStyle = 'rgba(110,128,156,0.45)';
+      ctx.fillRect(p.x + 2, p.y, p.w - 4, 4);
+      ctx.fillRect(p.x, p.y + 1, p.w, 2);
+      ctx.fillStyle = 'rgba(210,222,240,0.45)';
+      ctx.fillRect(p.x + 3, p.y + 1, Math.round(p.w / 3), 1);
+    }
+  }
+
+  // Rain streaks and splashes outdoors only (front yard); occasional lightning during a storm.
+  drawRain(ctx, s, sec) {
+    const W = s.mapW * T;
+    const H = s.yard.h - 4;
+    const t = this.ambientOn ? sec : 0;
+    const n = this.weather === 'badai' ? 170 : 110;
+    ctx.fillStyle = this.period === 'night' ? 'rgba(170,190,230,0.5)' : 'rgba(225,235,248,0.65)';
+    for (let i = 0; i < n; i++) {
+      const y = (rnd(i + 500) * H + t * (150 + rnd(i + 600) * 60)) % H;
+      const x = Math.round(rnd(i + 700) * (W + 40) - y * 0.25);
+      if (x < -4 || x > W + 4 || !this.isVisibleWorld(x, y, 8)) continue;
+      ctx.fillRect(x, Math.round(y), 1, 4);
+      ctx.fillRect(x - 1, Math.round(y) + 4, 1, 2);
+    }
+    ctx.fillStyle = 'rgba(225,235,248,0.55)';
+    for (let i = 0; i < 28; i++) {
+      const ph = (t * 2 + rnd(i + 800)) % 1;
+      if (ph > 0.35) continue;
+      const x = rnd(i + 900) * W;
+      const y = s.yard.road.y + 4 + rnd(i + 950) * (s.yard.h - s.yard.road.y - 10);
+      const r = 1 + Math.floor(ph * 6);
+      ctx.fillRect(Math.round(x - r), Math.round(y), 2 * r, 1);
+    }
+    if (this.weather === 'badai' && this.ambientOn) {
+      const ph = sec % 11;
+      if (ph < 0.1 || (ph > 0.22 && ph < 0.3)) {
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(0, 0, W, s.yard.h);
+      }
+    }
+  }
+
+  // Day/night lighting overlay, cached per scene + period + weather (browser local time).
   renderLighting(s, period) {
-    if (period === 'afternoon' && !s.windows) return null;
+    const wx = this.weather;
+    if (period === 'afternoon' && !s.windows && wx === 'cerah') return null;
     const W = s.mapW * T;
     const H = s.mapH * T;
     const c = document.createElement('canvas');
     c.width = W;
     c.height = H;
     const g = c.getContext('2d');
+    const skyH = s.yard ? s.yard.sky.h : 0; // the sky band has its own day/night colors
     const tint = { morning: 'rgba(255,196,120,0.07)', afternoon: null, evening: 'rgba(255,140,60,0.13)', night: 'rgba(18,26,60,0.46)' }[period];
     if (tint) {
       g.fillStyle = tint;
-      g.fillRect(0, 0, W, H);
+      g.fillRect(0, skyH, W, H - skyH);
+    }
+    if (s.yard && wx !== 'cerah') {
+      // Clouds/rain darken the outdoors; the building keeps its lights.
+      g.fillStyle = { berawan: 'rgba(70,80,95,0.10)', hujan: 'rgba(40,50,70,0.22)', badai: 'rgba(30,35,55,0.30)' }[wx];
+      g.fillRect(0, skyH, W, s.yard.h - skyH);
+    }
+    const lampsOn = period === 'night' || period === 'evening' || wx === 'hujan' || wx === 'badai';
+    if (s.yard && lampsOn) {
+      for (const l of s.yard.lamps) {
+        const pool = g.createRadialGradient(l.gx, l.gy, 2, l.gx, l.gy, 34);
+        pool.addColorStop(0, period === 'night' ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.4)');
+        pool.addColorStop(1, 'rgba(0,0,0,0)');
+        g.globalCompositeOperation = 'destination-out';
+        g.fillStyle = pool;
+        g.fillRect(l.gx - 36, l.gy - 36, 72, 72);
+        g.globalCompositeOperation = 'source-over';
+        const warm = g.createRadialGradient(l.gx, l.gy, 2, l.gx, l.gy, 30);
+        warm.addColorStop(0, 'rgba(255,214,140,0.22)');
+        warm.addColorStop(1, 'rgba(255,214,140,0)');
+        g.fillStyle = warm;
+        g.fillRect(l.gx - 32, l.gy - 32, 64, 64);
+        const halo = g.createRadialGradient(l.x, l.y, 1, l.x, l.y, 9);
+        halo.addColorStop(0, 'rgba(255,236,170,0.8)');
+        halo.addColorStop(1, 'rgba(255,236,170,0)');
+        g.fillStyle = halo;
+        g.fillRect(l.x - 10, l.y - 10, 20, 20);
+        g.fillStyle = '#fff2b8';
+        g.fillRect(l.x - 2, l.y - 1, 3, 2);
+      }
     }
     if (period === 'night' || period === 'evening') {
       // Room lights switch on: carve warm pools out of the dark overlay.
@@ -281,9 +563,11 @@ export class OfficeEngine {
         g.fillRect(p.x - 30, p.y - 30, 70, 70);
       }
     }
-    // Window light falling onto the floor during the day; night windows glow faintly blue.
+    // Window light falling onto the floor during the day (weaker under clouds, none in rain); night windows glow faintly blue.
     for (const w of s.windows || []) {
       const fy = w.y + 32;
+      if (period !== 'night' && (wx === 'hujan' || wx === 'badai')) continue;
+      if (period !== 'night' && wx === 'berawan') g.globalAlpha = 0.5;
       if (period === 'night') {
         g.fillStyle = 'rgba(120,160,255,0.10)';
         g.fillRect(w.x + 2, w.y + 8, 12, 14);
@@ -299,6 +583,7 @@ export class OfficeEngine {
       g.closePath();
       g.fill();
     }
+    g.globalAlpha = 1;
     return c;
   }
 
@@ -483,7 +768,8 @@ export class OfficeEngine {
     const minScale = Math.max(0.5, Math.min(1, fit));
     this.scale = this.zoomLevel ?? Math.max(fit, window.innerWidth < 700 ? 1 : fit);
     this.scale = Math.min(4, Math.max(minScale, this.scale));
-    const maxH = Math.round(window.innerHeight * 0.72);
+    // The page may provide the available height (e.g. to fill the space next to the chat column).
+    const maxH = this.maxHeight?.() ?? Math.round(window.innerHeight * 0.72);
     const cssH = Math.min(Math.round(worldH * this.scale), maxH);
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.cssW = cssW;
@@ -539,6 +825,7 @@ export class OfficeEngine {
       const walking = this.update(dt);
       let interval = 500; // ambient / idle breathing: 2 FPS
       if (walking) interval = 1000 / 30;
+      else if (this.ambientOn && this.raining() && this.yardVisible()) interval = 1000 / 15; // rain on screen
       else if (this.speech.size || this.anyVisible((c) => ['working', 'completed', 'thinking'].includes(c.state))) interval = 100;
       if (t - this.lastDraw >= interval) {
         this.lastDraw = t;
@@ -613,7 +900,22 @@ export class OfficeEngine {
     const sy = Math.max(0, Math.floor(this.cam.y));
     const sw = Math.min(this.bg.width - sx, Math.ceil(vw) + 2);
     const sh = Math.min(this.bg.height - sy, Math.ceil(vh) + 2);
+    // Front yard sky (behind the transparent sky band of the background): real time of day + weather.
+    const yard = this.scene.yard;
+    const yardOn = this.yardVisible();
+    if (yardOn) {
+      const now = new Date();
+      const key = `${this.scene.id}|${this.weather}|${now.getHours()}:${now.getMinutes()}`;
+      if (key !== this.skyKey || !this.sky) {
+        this.skyKey = key;
+        this.sky = this.renderSky(this.scene, now);
+        this.minimapThumb = null;
+      }
+      ctx.drawImage(this.sky, 0, 0);
+      this.drawClouds(ctx, this.scene, sec);
+    }
     if (sw > 0 && sh > 0) ctx.drawImage(this.bg, sx, sy, sw, sh, sx, sy, sw, sh);
+    if (yardOn && this.raining()) this.drawPuddles(ctx, this.scene);
 
     const items = [];
     // Ambient objects (visible only): swaying plants, clock hands, blinking server/status LEDs.
@@ -670,6 +972,7 @@ export class OfficeEngine {
       const lh = Math.min(this.light.height - sy, sh);
       if (lw > 0 && lh > 0) ctx.drawImage(this.light, sx, sy, lw, lh, sx, sy, lw, lh);
     }
+    if (yardOn && yard && this.raining()) this.drawRain(ctx, this.scene, sec);
     // Activity indicators (small, above heads).
     for (const c of this.chars.values()) {
       if (!c.e || c.path.length || !c.bubble || !this.isVisibleWorld(c.x, c.y)) continue;
@@ -782,14 +1085,16 @@ export class OfficeEngine {
 
   drawSigns(ctx, toScreen) {
     ctx.textBaseline = 'middle';
-    for (const r of this.scene.rooms) {
+    const list = this.scene.rooms.map((r) => ({ sign: r.sign, name: r.name, room: r }));
+    if (this.scene.yard) list.push({ sign: this.scene.yard.sign, name: this.scene.yard.sign.name, room: null });
+    for (const r of list) {
       const sg = r.sign;
       if (!sg) continue;
       const [x, y] = toScreen(sg.x, sg.y);
       const w = sg.w * this.scale;
       const h = sg.h * this.scale;
       if (x > this.cssW || y > this.cssH || x + w < 0 || y + h < 0) continue;
-      const badge = this.activeInRoom(r);
+      const badge = r.room ? this.activeInRoom(r.room) : 0;
       const room = badge ? h : 0;
       let fs = Math.max(7, Math.min(12, h * 0.62));
       ctx.font = `700 ${fs}px system-ui, sans-serif`;
@@ -924,6 +1229,7 @@ export class OfficeEngine {
       th.height = m.height;
       const tg = th.getContext('2d');
       tg.imageSmoothingEnabled = true;
+      if (this.sky) tg.drawImage(this.sky, 0, 0, th.width, (this.sky.height * th.width) / this.sky.width);
       tg.drawImage(this.bg, 0, 0, th.width, th.height);
       this.minimapThumb = th;
     }
@@ -966,6 +1272,7 @@ export class OfficeEngine {
     }
     const room = this.roomAt(w);
     if (room) return { type: 'room', key: room.key, room, scope: room === this.scene.meeting?.room ? this.scene.meeting.scope : null };
+    if (this.scene.yard && w.y >= 0 && w.y < this.scene.yard.h) return { type: 'yard' };
     return null;
   }
 
