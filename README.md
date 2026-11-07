@@ -58,6 +58,20 @@ npm run test:system
 
 ## Deploy (Docker / aaPanel)
 
+Cara tercepat di VPS (sebagai root, Docker sudah terpasang dari aaPanel App Store):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hafiz-ridha/AI-Holding-Office/main/scripts/deploy-aapanel.sh -o deploy.sh
+```
+
+```bash
+bash deploy.sh install --domain office.example.com
+```
+
+Update berikutnya cukup `bash deploy.sh update`; ada juga `backup`, `status`, `logs`, `restart`, `stop`.
+
+Cara manual:
+
 ```bash
 cp .env.example .env && mkdir -p data && sudo chown -R 1000:1000 data
 ```
@@ -176,6 +190,6 @@ src/            server.js, app.js, config.js, events.js
   routes/       REST API
   cli/          reset-password.js
 public/         SPA tanpa build step (HTML + CSS + ES modules + Canvas); assets/office-atlas.png (sprite sheet)
-scripts/        build-office-atlas.mjs (generator sprite sheet PNG, tanpa dependency)
+scripts/        deploy-aapanel.sh (install/update/backup di VPS aaPanel), build-office-atlas.mjs (generator sprite sheet PNG)
 test/           node:test (65 tes) + test/system (restart, beban, RAM)
 ```

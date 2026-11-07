@@ -4,6 +4,43 @@ Target: VPS Linux RAM 1 GB, aaPanel, domain dengan HTTPS. Aplikasi berjalan seba
 yang hanya mendengarkan di `127.0.0.1:3000`. Nginx milik aaPanel menjadi reverse proxy HTTPS.
 Panduan ini tidak mengubah konfigurasi server aaPanel secara otomatis; semua langkah dilakukan oleh admin.
 
+## Cara cepat: skrip otomatis
+
+Setelah Docker terpasang dari aaPanel (lihat Prasyarat), jalankan sebagai root lewat SSH atau aaPanel → *Terminal*:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hafiz-ridha/AI-Holding-Office/main/scripts/deploy-aapanel.sh -o deploy.sh
+bash deploy.sh install --domain office.example.com
+```
+
+Skrip ini melakukan langkah 2–4 di bawah secara otomatis:
+
+- clone ke `/www/wwwroot/ai-holding`;
+- membuat `.env` dengan `APP_SECRET` dan password admin acak;
+- `chown` folder data;
+- build & menjalankan container;
+- menunggu health check.
+
+Di akhir, skrip mencetak login admin pertama dan langkah reverse proxy/SSL (langkah 5). Konfigurasi website
+aaPanel tidak diubah otomatis; langkah 5 tetap Anda lakukan di UI aaPanel.
+
+| Perintah | Fungsi |
+|---|---|
+| `bash deploy.sh install [--domain D] [--port P]` | Pasang pertama kali / pasang ulang (idempoten; `.env` dan data dipertahankan) |
+| `bash deploy.sh update` | Backup DB → tarik kode terbaru → build ulang → health check |
+| `bash deploy.sh backup` | Backup konsisten (SQLite `VACUUM INTO`) ke `data/backups/manual-*.db` |
+| `bash deploy.sh status` | Status container, health, RAM/CPU, versi |
+| `bash deploy.sh logs` / `restart` / `stop` | Log, restart, hentikan (data tetap aman) |
+
+Opsi lain:
+
+- `--dir` untuk folder lain.
+- `--branch` dan `--repo` untuk fork.
+- `--create-swap` membuat swapfile 1 GB bila RAM < 2 GB tanpa swap. Ini mengubah sistem, jadi hanya dijalankan bila Anda memintanya.
+- `-y` untuk tanpa konfirmasi.
+
+`APP_SECRET` yang sudah ada tidak pernah diganti, sehingga API key tersimpan tetap terbaca.
+
 ## 1. Prasyarat
 
 1. aaPanel terpasang dan dapat diakses.
