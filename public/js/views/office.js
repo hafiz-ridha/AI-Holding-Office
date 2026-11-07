@@ -1,6 +1,6 @@
 // AI Virtual Office: HQ + one office per business (built lazily), interactive panels, real task states only.
 import { get } from '../api.js';
-import { h, mount, clear, badge, fmtRel, fmtDate, fmtNum, taskCode, md, KIND_LABEL, ORG_LABEL, emptyState } from '../ui.js';
+import { h, mount, badge, fmtRel, fmtDate, fmtNum, taskCode, md, KIND_LABEL, ORG_LABEL, emptyState } from '../ui.js';
 import { loadAtlas } from '../office/sprite-atlas.js';
 import { buildHQScene, buildBusinessScene, sceneKey } from '../office/scenes.js';
 import { OfficeEngine, dayPeriod } from '../office/engine.js';
@@ -69,27 +69,45 @@ export async function render(root, [initial = 'hq'], ctx) {
 
   const panel = h('aside', { class: 'office-panel card', 'aria-live': 'polite', hidden: true });
   const chat = createChat({ onAgentMessage: (m) => engine?.say(m.sender_employee_id, m.content) });
-  // Obrolan | Detail column on the right of the office (below it on narrow screens).
+  // Employee status list ("Status karyawan"): its own column right of the chat on wide screens, otherwise a third tab.
+  const rosterCount = h('span', { class: 'small muted' });
+  const rosterChips = h('div', { class: 'row', style: { gap: '4px' } });
+  const rosterList = h('div', { class: 'roster-list' });
+  const roster = h('section', { class: 'card office-roster', 'aria-label': 'Status karyawan di kantor ini' },
+    h('div', { class: 'row-between' }, h('h3', null, 'Status karyawan'), rosterCount), rosterChips, rosterList);
+
+  // Obrolan | Detail (| Status) column on the right of the office (below it on narrow screens).
   let sideTab = 'chat';
+  const wideMq = window.matchMedia('(min-width: 1680px)');
   const tabChat = h('button', { class: 'office-tab active', type: 'button', onclick: () => showSide('chat') }, 'Obrolan');
   const tabInfo = h('button', { class: 'office-tab', type: 'button', onclick: () => { showSide('detail'); showPanel(); } }, 'Detail');
+  const tabStatus = h('button', { class: 'office-tab', type: 'button', onclick: () => showSide('status') }, 'Status');
   function showSide(which) {
+    if (which === 'status' && wideMq.matches) which = 'chat'; // the list has its own column on wide screens
     sideTab = which;
     tabChat.classList.toggle('active', which === 'chat');
     tabInfo.classList.toggle('active', which === 'detail');
+    tabStatus.classList.toggle('active', which === 'status');
     chat.el.hidden = which !== 'chat';
     panel.hidden = which !== 'detail';
+    roster.hidden = !wideMq.matches && which !== 'status';
   }
-  const side = h('div', { class: 'office-side' }, h('div', { class: 'office-tabs' }, tabChat, tabInfo), chat.el, panel);
+  const side = h('div', { class: 'office-side' }, h('div', { class: 'office-tabs' }, tabChat, tabInfo, tabStatus), chat.el, panel);
   const legend = h('div', { class: 'legend' }, ['idle', 'resting', 'pending', 'thinking', 'working', 'meeting', 'completed', 'error'].map((k) =>
     h('span', null, h('span', { class: 'dot', style: { background: STATE[k].color } }), `${STATE[k].label}${k === 'pending' ? ' (antre)' : ''}`)), h('span', null, '· WALKING: saat status berubah · Klik karakter, meja, atau ruangan untuk detail'));
-  const tableBody = h('tbody');
-  mount(root, h('div', { class: 'stack' },
-    tabs,
-    h('div', { class: 'office-layout' }, h('div', { class: 'stack-sm', style: { minWidth: 0 } }, statusBar, wrap, legend), side),
-    h('details', { class: 'card' }, h('summary', null, 'Tabel status karyawan di kantor ini'),
-      h('div', { class: 'table-wrap', style: { marginTop: '10px' } }, h('table', null,
-        h('thead', null, h('tr', null, h('th', null, 'Nama'), h('th', null, 'Jabatan'), h('th', null, 'Status'), h('th', null, 'Tugas'))), tableBody)))));
+  const layout = h('div', { class: 'office-layout' }, h('div', { class: 'stack-sm', style: { minWidth: 0 } }, statusBar, wrap, legend), side);
+  function placeRoster() {
+    const wide = wideMq.matches;
+    layout.classList.toggle('three', wide);
+    tabStatus.hidden = wide;
+    if (wide) layout.append(roster);
+    else side.append(roster);
+    showSide(sideTab);
+  }
+  // The office page uses the full window width (other pages keep their max width) and fits one screen.
+  root.classList.add('view-full');
+  mount(root, h('div', { class: 'stack' }, tabs, layout));
+  placeRoster();
 
   mount(panel, h('p', { class: 'muted' }, 'Memuat kantor…'));
   let atlas;
@@ -98,7 +116,7 @@ export async function render(root, [initial = 'hq'], ctx) {
   } catch (e) {
     showSide('detail');
     mount(panel, h('p', { class: 'form-error' }, `Aset kantor gagal dimuat: ${e.message}`));
-    return;
+    return () => root.classList.remove('view-full');
   }
 
   let data = null;
@@ -513,13 +531,32 @@ export async function render(root, [initial = 'hq'], ctx) {
     chat.setChannel(b ? String(b.id) : 'hq', b ? `Kantor ${b.name} · hanya obrolan bisnis ini` : 'Kantor Pusat · semua obrolan (pusat & bisnis)').catch(() => {});
   }
 
+  // "Status karyawan" list (employees present in this office). Rebuilt only when something actually changed.
+  let rosterKey = '';
   function fillTable() {
-    clear(tableBody);
     const ids = new Set(engine.chars.keys());
-    for (const e of data.employees.filter((x) => ids.has(x.id))) {
-      tableBody.append(h('tr', null, h('td', null, e.name), h('td', null, e.role), h('td', null, stateBadge(shownState(e)), ' ', STATE[shownState(e)]?.text || ''),
-        h('td', null, e.task ? h('a', { href: `#/task/${e.task.id}` }, `${taskCode(e.task.id)} ${e.task.title}`) : '-')));
-    }
+    const list = data.employees.filter((x) => ids.has(x.id));
+    const rows = list.map((e) => ({ e, st: shownState(e) }));
+    const key = JSON.stringify(rows.map(({ e, st }) => [e.id, st, e.task?.id, e.task?.title]));
+    if (key === rosterKey) return;
+    rosterKey = key;
+    rosterCount.textContent = `${list.length} orang`;
+    const counts = {};
+    for (const r of rows) counts[r.st] = (counts[r.st] || 0) + 1;
+    mount(rosterChips, Object.entries(counts).map(([k, v]) => h('span', { class: 'pill' }, stateBadge(k), ` ${v}`)));
+    mount(rosterList, rows.map(({ e, st }) => {
+      const busy = e.task && !['idle', 'resting'].includes(st);
+      return h('div', {
+        class: 'roster-item', role: 'button', tabindex: 0, title: `${e.name} — ${e.role}`,
+        onclick: () => selectEmployee(e.id, true),
+        onkeydown: (ev) => (ev.key === 'Enter' || ev.key === ' ') && (ev.preventDefault(), selectEmployee(e.id, true)),
+      },
+      avatarCanvas(e.avatar, 1),
+      h('div', { class: 'grow' },
+        h('div', { class: 'roster-name' }, h('b', null, e.name), h('span', { class: 'small muted' }, ` · ${String(e.role).split(' — ')[0]}`)),
+        h('div', { class: `roster-task small ${busy ? '' : 'muted'}` }, busy ? `${taskCode(e.task.id)} ${e.task.title}` : STATE[st]?.text || '')),
+      stateBadge(st));
+    }));
   }
 
   async function refresh() {
@@ -673,6 +710,7 @@ export async function render(root, [initial = 'hq'], ctx) {
   const ro = new ResizeObserver(() => engine.resize());
   const onWinResize = () => engine.resize();
   window.addEventListener('resize', onWinResize);
+  wideMq.addEventListener('change', placeRoster);
   ro.observe(wrap);
   // Pause rendering when the tab is hidden or the canvas is scrolled out of view.
   let onScreen = true;
@@ -695,5 +733,7 @@ export async function render(root, [initial = 'hq'], ctx) {
     io.disconnect();
     document.removeEventListener('visibilitychange', onVis);
     document.removeEventListener('keydown', onKey);
+    wideMq.removeEventListener('change', placeRoster);
+    root.classList.remove('view-full');
   };
 }

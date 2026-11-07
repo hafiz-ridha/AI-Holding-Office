@@ -148,8 +148,9 @@ Menu **AI Virtual Office**:
 - Pilih **Kantor Pusat** atau kantor bisnis mana pun lewat tab. Bisnis baru langsung muncul tanpa perubahan kode.
 - **Status bar** di atas kantor: tanggal/jam lokal, jumlah karyawan, yang sedang bekerja, tugas aktif, selesai hari ini,
   jumlah bisnis, dan status sistem (normal / antrean dijeda / provider AI bermasalah). Semua angka dari backend.
-- Kantor mengisi seluruh lebar di kiri kolom **Obrolan/Detail**, dan tinggi kanvas mengikuti layar sehingga sejajar dengan
-  kolom obrolan. Seret untuk menggeser; tombol **+ / − / Pas** (atau Ctrl+scroll, tombol `+` `-` `0`) untuk zoom dan reset
+- Halaman kantor memakai seluruh lebar jendela dan pas satu layar (tanpa scroll): kantor di kiri, kolom **Obrolan/Detail**,
+  dan di layar lebar (≥ 1680 px) kolom **Status karyawan** di paling kanan (nama, jabatan, status, tugas aktif; klik untuk
+  membuka kartu karyawan). Di layar lebih sempit, Status karyawan menjadi tab ketiga. Tinggi kanvas mengikuti layar. Seret untuk menggeser; tombol **+ / − / Pas** (atau Ctrl+scroll, tombol `+` `-` `0`) untuk zoom dan reset
   kamera. Tombol **Peta** menampilkan minimap (mati secara default; klik minimap untuk memindahkan kamera).
 - **Halaman depan** (bagian atas peta): langit sesuai jam browser (matahari/bulan di posisi sebenarnya, bintang, siluet kota),
   jalan, trotoar dengan lampu jalan dan pohon, parkiran (zona motor dua baris, parkir paralel dengan satu pickup double
