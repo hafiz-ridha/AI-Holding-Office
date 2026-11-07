@@ -8,7 +8,7 @@ Semua pengujian AI memakai server **mock** OpenAI-compatible & Telegram lokal (`
 Integrasi dengan API key asli (OpenRouter, Groq, Gemini, 9Router, Telegram) **belum diuji** karena tidak ada
 kredensial; dashboard menyediakan *Test connection* untuk memverifikasinya setelah key diisi.
 
-## 1. Tes otomatis: `npm test` → 80/80 lulus
+## 1. Tes otomatis: `npm test` → 81/81 lulus
 
 | File | Cakupan |
 |---|---|
@@ -20,7 +20,7 @@ kredensial; dashboard menyediakan *Test connection* untuk memverifikasinya setel
 | `06-migration` (2) | DB v1 berisi data → migrasi holding: backup `pre-migrate` otomatis, data lama utuh, prompt kustom tidak berubah; backup/restore `integrity_check ok` + FTS |
 | `07-provider-catalog` (6) | 18 preset valid, placeholder Account ID Cloudflare, default rate limit preset, provider tanpa key, provider tanpa `/models` (ping chat 1×, saran model preset) |
 | `09-chat` (7) | obrolan agen dari event nyata (penugasan/rapat/selesai/laporan), urutan pesan owner → mulai → balasan, mode catatan & slash command tanpa AI, isolasi saluran per bisnis, staf bisnis lain ditolak, hapus riwayat per saluran |
-| `10-office-visual` (7) | lapisan visual v3/v4: peta frame modul = JSON = PNG (ukuran & hash versi), halaman depan (tepat satu pickup, dua baris motor, kendaraan di dalam parkiran, jalan masuk & pintu utama bebas), tidak ada objek bertumpuk di Kantor Pusat & kantor bisnis (holding default, 8 bisnis × 9 staf + 7 shared, holding hampir kosong), setiap ruangan punya wallpaper/papan nama/pintu, kursi lounge punya lorong bebas, meja deterministik per karyawan, semua frame sprite tersedia |
+| `10-office-visual` (8) | rasio peta 1,0–3,5 (mengisi layar) tetap tanpa tabrakan;  lapisan visual v3/v4: peta frame modul = JSON = PNG (ukuran & hash versi), halaman depan (tepat satu pickup, dua baris motor, kendaraan di dalam parkiran, jalan masuk & pintu utama bebas), tidak ada objek bertumpuk di Kantor Pusat & kantor bisnis (holding default, 8 bisnis × 9 staf + 7 shared, holding hampir kosong), setiap ruangan punya wallpaper/papan nama/pintu, kursi lounge punya lorong bebas, meja deterministik per karyawan, semua frame sprite tersedia |
 | `08-office` (8) | state kantor dari data nyata: idle saat tidak ada pekerjaan, THINKING→WORKING→MEETING→COMPLETED, meeting HQ vs bisnis, Shared Services "visiting", ERROR dari tugas gagal/tertunda, panel karyawan (token, model, hasil), panel koordinasi terisolasi per bisnis, bisnis baru tampil otomatis, sprite sheet PNG valid |
 
 ## 2. Uji sistem: `npm run test:system`

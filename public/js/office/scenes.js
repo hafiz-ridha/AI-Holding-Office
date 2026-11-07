@@ -48,6 +48,20 @@ function layoutBands(bands, mapW) {
   return { rooms, corridors, mapW, mapH: y };
 }
 
+// Map width for a target aspect ratio (canvas width / height) so that "Pas" fills the whole canvas: rooms simply get
+// wider. Height barely depends on width (only through desks per row), so two passes converge.
+const MAX_MAP_W = 120;
+function layoutFor(makeBands, { aspect, minW, defaultW }) {
+  let w = defaultW;
+  if (aspect && Number.isFinite(aspect)) {
+    for (let i = 0; i < 2; i++) {
+      const h = layoutBands(makeBands(), w).mapH;
+      w = Math.min(MAX_MAP_W, Math.max(minW, Math.round(aspect * h)));
+    }
+  }
+  return layoutBands(makeBands(), w);
+}
+
 function door(room) {
   return { x: (room.x + room.w / 2) * T, y: (room.y + room.h) * T - 10, corridorY: (room.y + room.h) * T + T };
 }
@@ -469,7 +483,8 @@ export function findCollisions(scene) {
 }
 
 // ---------- HQ ----------
-export function buildHQScene(data, size) {
+// opts.aspect: canvas width/height; the map is laid out to that ratio (default: 64 tiles wide).
+export function buildHQScene(data, size, opts = {}) {
   const active = (e) => e.state !== 'off';
   const emps = data.employees.filter(active);
   const ceo = emps.find((e) => e.is_manager);
@@ -492,7 +507,7 @@ export function buildHQScene(data, size) {
   };
 
   const R = (key, name, w, extra) => ({ key, name, w, floor: 'wood', tint: null, kind: 'desks', cols: 2, deskCount: 0, ...extra });
-  const bands = [
+  const makeBands = () => [
     [
       R('ceo', 'CEO Office', 11, { floor: 'parquet', tint: '#8a6fb0', cols: 1, deskCount: ceo ? 1 : 0, exec: true }),
       R('meeting', 'Meeting Room', 15, { floor: 'tile', kind: 'meeting', minH: 11, tint: '#4f6d8a' }),
@@ -511,7 +526,7 @@ export function buildHQScene(data, size) {
       R('lounge', 'Lounge', 16, { floor: 'parquet', kind: 'lounge', minH: 10, tint: '#5f9e54' }),
     ],
   ];
-  const base = layoutBands(bands, 64); // landscape: ~1024 x 752 px
+  const base = layoutFor(makeBands, { aspect: opts.aspect, minW: 46, defaultW: 64 });
   const room = (k) => base.rooms.find((r) => r.key === k);
   const frameOf = (id) => ROLE_DESK[empById.get(id)?.role_key];
   const desks = [];
@@ -535,14 +550,14 @@ export function buildHQScene(data, size) {
 }
 
 // ---------- business office ----------
-export function buildBusinessScene(data, business, size) {
+export function buildBusinessScene(data, business, size, opts = {}) {
   const emps = data.employees.filter((e) => e.state !== 'off');
   const manager = emps.find((e) => e.id === business.manager_employee_id) || null;
   const staff = emps.filter((e) => e.id !== manager?.id && e.business_ids?.includes(business.id) && e.org_unit === 'business');
   const assignedShared = emps.filter((e) => e.org_unit === 'shared' && e.business_ids?.includes(business.id));
   const empById = new Map(data.employees.map((e) => [e.id, e]));
   const tint = business.color || '#3b82f6';
-  const bands = [
+  const makeBands = () => [
     [
       { key: 'manager', name: `Ruang Manager · ${business.name}`, w: 11, kind: 'desks', cols: 1, deskCount: 1, exec: true, floor: 'carpet', tint },
       { key: 'workspace', name: `Area Kerja Tim · ${business.name}`, w: 27, kind: 'desks', cols: 4, deskCount: Math.max(1, staff.length + assignedShared.length), floor: 'wood', tint },
@@ -553,7 +568,7 @@ export function buildBusinessScene(data, business, size) {
       { key: 'lounge', name: 'Pantry', w: 12, kind: 'lounge', minH: 10, floor: 'parquet', tint: '#5f9e54' },
     ],
   ];
-  const base = layoutBands(bands, 56); // landscape: ~896 x 560 px
+  const base = layoutFor(makeBands, { aspect: opts.aspect, minW: 40, defaultW: 56 });
   const room = (k) => base.rooms.find((r) => r.key === k);
   const desks = [];
   // Manager desk exists even without a manager (shown empty) so the office still reads as a business.

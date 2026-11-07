@@ -117,8 +117,11 @@ export class OfficeEngine {
 
   // ---------------- scene ----------------
   setScene(scene) {
-    const changedScene = !this.scene || this.scene.id !== scene.id;
+    // Another office, or the same office laid out to a new size (window resized): place everyone directly.
+    const changedScene = !this.scene || this.scene.id !== scene.id || this.scene.mapW !== scene.mapW || this.scene.mapH !== scene.mapH;
     this.scene = scene;
+    this.grids = new Map(); // walk grids are per scene
+    this.sky = null;
     this.bg = this.renderBackground(scene);
     this.light = this.renderLighting(scene, this.period);
     if (changedScene) {
@@ -129,7 +132,6 @@ export class OfficeEngine {
       this.hovered = null;
       this.zoomLevel = null;
       this.firstPlacement = true;
-      this.grids = new Map(); // walk grids are per scene
     }
     if (scene.business?.has_logo && !scene.logoImg) {
       const img = new Image();

@@ -151,8 +151,9 @@ Menu **AI Virtual Office**:
 - Halaman kantor memakai seluruh lebar jendela dan pas satu layar (tanpa scroll): animasi kantor mengisi semua ruang di kiri
   kolom samping bertab **Obrolan · Detail · Status**. Tab *Status* berisi status karyawan (nama, jabatan, status, tugas
   aktif; klik untuk membuka kartu karyawan). Tinggi kanvas mengikuti layar.
-- Peta berbentuk landscape (Kantor Pusat 64 × 47 tile, kantor bisnis 56 × 35 tile; ruangan lebih lega, meja di tengah).
-  Saat dibuka dan setiap kali tombol **Pas** diklik, seluruh kantor (halaman depan + semua ruangan) terlihat dalam kanvas. Seret untuk menggeser; tombol **+ / − / Pas** (atau Ctrl+scroll, tombol `+` `-` `0`) untuk zoom dan reset
+- Lebar peta mengikuti proporsi kanvas di layar Anda: ruangan melebar sampai kantor (halaman depan + semua ruangan) mengisi
+  kanvas penuh saat dibuka dan setiap kali tombol **Pas** diklik. Saat ukuran jendela berubah, tata letak menyesuaikan
+  otomatis. Ponsel memakai peta landscape standar pada skala 1:1 dan bisa digeser. Seret untuk menggeser; tombol **+ / − / Pas** (atau Ctrl+scroll, tombol `+` `-` `0`) untuk zoom dan reset
   kamera. Tombol **Peta** menampilkan minimap (mati secara default; klik minimap untuk memindahkan kamera).
 - **Halaman depan** (bagian atas peta): langit sesuai jam browser (matahari/bulan di posisi sebenarnya, bintang, siluet kota),
   jalan, trotoar dengan lampu jalan dan pohon, parkiran (zona motor dua baris, parkir paralel dengan satu pickup double

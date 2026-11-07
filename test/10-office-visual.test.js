@@ -87,6 +87,22 @@ test('layouts stay collision-free for an almost empty holding', () => {
   checkScene(buildBusinessScene(data, data.businesses[0], size));
 });
 
+test('maps follow the canvas aspect ratio (fill the screen) and stay collision-free', () => {
+  const data = makeData({ businesses: 3, staffPerBiz: 3 });
+  for (const aspect of [1.0, 1.36, 1.71, 2.2, 3.5]) {
+    const hq = buildHQScene(data, size, { aspect });
+    const biz = buildBusinessScene(data, data.businesses[0], size, { aspect });
+    for (const s of [hq, biz]) {
+      checkScene(s);
+      const got = s.mapW / s.mapH;
+      // Within one tile of the requested ratio, unless clamped by the minimum/maximum width.
+      if (s.mapW > 46 && s.mapW < 120) assert.ok(Math.abs(got - aspect) <= 1.5 / s.mapH + 0.01, `${s.id} aspect ${got.toFixed(2)} ~ ${aspect}`);
+      assert.ok(s.mapW >= 40 && s.mapW <= 120);
+    }
+    assert.equal(new Set(hq.desks.map((d) => d.owner)).size, hq.desks.length);
+  }
+});
+
 test('every employee keeps one desk; decoration does not move desks', () => {
   const data = makeData({ businesses: 3, staffPerBiz: 3 });
   const hq = buildHQScene(data, size);

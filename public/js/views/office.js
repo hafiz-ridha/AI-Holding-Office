@@ -480,19 +480,46 @@ export async function render(root, [initial = 'hq'], ctx) {
     return Math.max(360, Math.round(window.innerHeight - top - legend.offsetHeight - 28));
   };
 
+  // The map is laid out to the canvas proportions (width / available height), so "Pas" fills the whole canvas.
+  // Phones keep the default landscape map at 1:1 and pan.
+  function canvasAspect() {
+    if (window.innerWidth < 700) return null;
+    const w = wrap.clientWidth;
+    const hgt = engine.maxHeight?.();
+    return w > 0 && hgt > 0 ? Math.round((w / hgt) * 50) / 50 : null; // 0.02 steps: ~1 tile
+  }
+
   function sceneFor(id) {
-    const key = sceneKey(data, id);
+    const aspect = canvasAspect();
+    const key = `${sceneKey(data, id)}|${aspect}`;
     const cached = scenes.get(id);
     if (cached && cached.key === key) return cached.scene;
     let scene;
-    if (id === 'hq') scene = buildHQScene(data, atlas.size);
+    if (id === 'hq') scene = buildHQScene(data, atlas.size, { aspect });
     else {
       const b = data.businesses.find((x) => `biz-${x.id}` === id && x.status === 'active');
       if (!b) return null;
-      scene = buildBusinessScene(data, b, atlas.size);
+      scene = buildBusinessScene(data, b, atlas.size, { aspect });
     }
     scenes.set(id, { key, scene });
     return scene;
+  }
+
+  // Re-measure the canvas and, when its proportions changed, lay the office out again (debounced).
+  let refitTimer = null;
+  function refit(delay = 150) {
+    clearTimeout(refitTimer);
+    refitTimer = setTimeout(() => {
+      if (!data || !engine.scene) return;
+      engine.resize();
+      const scene = sceneFor(current);
+      if (scene && scene !== engine.scene) {
+        engine.setScene(scene);
+        engine.setData(data, { resting: restingSet() });
+        rosterKey = '';
+        fillTable();
+      }
+    }, delay);
   }
 
   function renderTabs() {
@@ -690,7 +717,7 @@ export async function render(root, [initial = 'hq'], ctx) {
   updateStatusBar();
   detectChanges();
   // Final layout (tabs + status bar filled) -> exact canvas height. setTimeout (not rAF) also runs in a background tab.
-  setTimeout(() => engine.resize(), 0);
+  refit(0);
   engine.start();
   ctx.poll(async () => {
     await refresh();
@@ -700,8 +727,14 @@ export async function render(root, [initial = 'hq'], ctx) {
     refreshWeather(); // only fetches when the automatic reading is older than 15 minutes
     if (!panel.hidden && (selection || Date.now() - panelAt > 10000)) showPanel(true);
   }, 2000);
-  const ro = new ResizeObserver(() => engine.resize());
-  const onWinResize = () => engine.resize();
+  const ro = new ResizeObserver(() => {
+    engine.resize();
+    refit();
+  });
+  const onWinResize = () => {
+    engine.resize();
+    refit();
+  };
   window.addEventListener('resize', onWinResize);
   ro.observe(wrap);
   // The canvas height depends on what is above/below it: office tabs (filled after the first render), the status bar
@@ -727,6 +760,7 @@ export async function render(root, [initial = 'hq'], ctx) {
     sound.destroy();
     ro.disconnect();
     window.removeEventListener('resize', onWinResize);
+    clearTimeout(refitTimer);
     io.disconnect();
     document.removeEventListener('visibilitychange', onVis);
     document.removeEventListener('keydown', onKey);
