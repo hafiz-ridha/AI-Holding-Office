@@ -8,7 +8,8 @@ import providers from './providers.js';
 import telegram from './telegram.js';
 import settings from './settings.js';
 import chat from './chat.js';
+import knowledge from './knowledge.js';
 
 export async function registerRoutes(app) {
-  for (const r of [health, auth, holding, businesses, tasks, employees, providers, telegram, settings, chat]) await app.register(r);
+  for (const r of [health, auth, holding, businesses, tasks, employees, providers, telegram, settings, chat, knowledge]) await app.register(r);
 }

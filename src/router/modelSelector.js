@@ -18,7 +18,9 @@ export const NEEDS = {
 const NEED_ORDER = ['coding', 'reasoning', 'writing', 'quick', 'general'];
 
 // Marker added by the chat module to quick-reply tasks (see holding/chat.js); stripped before keyword matching.
-const CHAT_REPLY = /\(Pesan obrolan dari owner\.[^)]*\)/;
+export const CHAT_REPLY = /\(Pesan obrolan dari owner\.[^)]*\)/;
+/** True for a quick chat reply ("Balasan cepat"): conversation with the owner, not a work task. */
+export const isChatReply = (task) => CHAT_REPLY.test(String(task?.description || ''));
 
 // [global regex, weight per distinct word (max 2 words counted per regex)]
 const KEYWORDS = {
@@ -57,7 +59,7 @@ const ROLE_BIAS = {
  */
 export function detectNeed({ purpose = 'work', task = null, employee = null, inputTokens = 0 } = {}) {
   const raw = `${task?.title || ''}\n${task?.description || ''}`;
-  const isChatReply = CHAT_REPLY.test(raw);
+  const chatReply = CHAT_REPLY.test(raw);
   const text = raw.replace(CHAT_REPLY, '').toLowerCase().slice(0, 6000);
   const score = Object.fromEntries(NEED_ORDER.map((k) => [k, 0]));
   const signals = Object.fromEntries(NEED_ORDER.map((k) => [k, []]));
@@ -80,7 +82,7 @@ export function detectNeed({ purpose = 'work', task = null, employee = null, inp
   }
   const bias = employee && ROLE_BIAS[employee.role_key];
   if (bias) add(bias[0], bias[1], `peran ${String(employee.role || employee.role_key).split(' — ')[0]}`);
-  if (isChatReply) {
+  if (chatReply) {
     add('quick', 1.5, 'balasan obrolan');
     const body = String(task?.description || '').replace(CHAT_REPLY, '').trim();
     if (body.length < 160) add('quick', 1, 'pesan pendek');

@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { q, now, tx } from './index.js';
 import { hashPassword } from '../lib/crypto.js';
 import { config } from '../config.js';
+import { backfillKnowledge } from '../holding/knowledge.js';
 
 const SAFETY = `
 Aturan kerja:
@@ -195,6 +196,13 @@ export async function seed(log = console) {
       setFlag('_holding_seeded');
     }
   });
+
+  // Second Brain (migration 005): turn work finished before the upgrade into knowledge notes, once.
+  if (!flag('_knowledge_backfilled')) {
+    const n = tx(() => backfillKnowledge());
+    setFlag('_knowledge_backfilled');
+    if (n) log.info?.(`Second Brain: ${n} catatan dibuat dari hasil kerja sebelumnya`);
+  }
 
   // Initial admin user.
   if (q.get('SELECT COUNT(*) AS n FROM users').n === 0) {

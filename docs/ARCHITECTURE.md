@@ -118,6 +118,30 @@ diurutkan ulang untuk setiap panggilan, sedangkan 1–2 (pilihan admin) tetap di
   di obrolan, detail tugas, pembaca laporan, serta notifikasi Telegram.
 - `GET /api/providers/routing` menampilkan pilihan utama per kebutuhan dan profil tiap model terpasang.
 
+### Second Brain — pengetahuan bersama antarmodel
+
+`src/holding/knowledge.js`, migrasi `005_knowledge.sql` (tabel `knowledge_notes` + FTS5 `knowledge_fts`,
+kolom `tasks.knowledge_refs`). Pengetahuan berada di SQLite, jadi model mana pun yang menjawab membaca catatan
+yang sama.
+
+- **Capture** (`captureTask`, dipanggil di `finish()` orkestrator): satu catatan per tugas selesai, berisi bagian
+  Ringkasan/Hasil/Rekomendasi dari jawaban (`distill`) beserta penulis, provider/model, dan sumber tugas. Yang
+  dilewati: balasan cepat obrolan (penanda "Pesan obrolan dari owner"), jawaban di bawah 120 karakter, dan saat
+  `knowledge_enabled = false`. Balasan cepat juga tidak lagi ditulis ke memori kerja karyawan.
+- **Recall** (`recallKnowledge` + `formatKnowledge`, dipakai di rencana CEO, rencana Business Manager, dan
+  pengerjaan karyawan; tidak di tahap rangkuman). Isinya: catatan yang disematkan, lalu hasil FTS5 (bm25, judul
+  dibobot 3×) yang diurutkan ulang menurut kepentingan dan umur, hingga `knowledge_items` catatan dalam ±2.400
+  karakter. Blok ini masuk ke pesan *system* sebagai data, bukan instruksi. Bila judul mirip (≥0,6) dengan catatan
+  lama, AI diminta memperbarui hasil itu.
+- **Isolasi:** `business_id IS task.business_id`. Catatan `ceo_only` (laporan holding) hanya untuk Group CEO dengan
+  `group_ceo_cross_business`. Catatan dari rantai tugas yang sama (induk, saudara, anak) dilewati karena sudah ada
+  di prompt.
+- **Pencarian** (`src/lib/search.js`, juga dipakai knowledge base dokumen): stop word ID/EN dibuang, kata ≥4 huruf
+  memakai prefix match, dan sinonim bisnis ditambahkan.
+- **Batas:** maksimal 5.000 catatan kerja yang tidak disematkan; yang paling tidak penting dan paling lama tidak
+  dipakai dipangkas lebih dulu. Backfill sekali dari 300 tugas selesai terakhir (`_knowledge_backfilled`).
+- API: `GET/POST /api/knowledge`, `GET/PUT/DELETE /api/knowledge/:id`. Perubahan dicatat di audit log.
+
 Kandidat dilewati bila: provider nonaktif, provider/model sedang cooldown (429, kuota habis,
 model tidak ditemukan), batas request harian provider atau global tercapai.
 Setiap job dibatasi `max_model_attempts` (default 4) sehingga tidak ada retry tak terbatas.

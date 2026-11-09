@@ -44,6 +44,11 @@ export async function startMockProvider({ key = 'test-key', delayMs = 0 } = {}) 
       if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
       let content = `Hasil kerja untuk: ${lastUser.slice(0, 80)}`;
       if (/APPROVAL_TEST/.test(lastUser)) content += '\n\nPERLU PERSETUJUAN ADMIN: Transfer dana promosi Rp 5.000.000';
+      // A full work result, long enough to be kept by the Second Brain.
+      if (/HASIL_PANJANG/.test(lastUser)) {
+        content += '\n\n## Ringkasan\nTemuan utama: harga pesaing rata-rata Rp28.000 per gelas, promo bundling paling efektif di akhir pekan, ' +
+          'pelanggan baru datang dari Instagram.\n\n## Rekomendasi\nUji paket bundling dua minggu dan ukur kenaikan omzet.';
+      }
       const slugsIn = (section) => [...section.matchAll(/slug "([^"]+)"/g)].map((m) => m[1]);
       // Group CEO planning prompt -> one business task per listed business + one shared-service task.
       if (/RENCANA_HOLDING_JSON/.test(lastUser)) {

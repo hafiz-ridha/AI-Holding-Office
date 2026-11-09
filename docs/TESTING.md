@@ -8,7 +8,7 @@ Semua pengujian AI memakai server **mock** OpenAI-compatible & Telegram lokal (`
 Integrasi dengan API key asli (OpenRouter, Groq, Gemini, 9Router, Telegram) **belum diuji** karena tidak ada
 kredensial; dashboard menyediakan *Test connection* untuk memverifikasinya setelah key diisi.
 
-## 1. Tes otomatis: `npm test` → 90/90 lulus
+## 1. Tes otomatis: `npm test` → 99/99 lulus
 
 | File | Cakupan |
 |---|---|
@@ -17,11 +17,12 @@ kredensial; dashboard menyediakan *Test connection* untuk memverifikasinya setel
 | `03-orchestrator` (11) | Group CEO → Business Manager → staf → laporan bisnis → laporan holding, Shared Services per bisnis, jawaban langsung (1 panggilan), business task langsung, approval owner, pending → failed, cancel berantai, pause/resume, batas token, recovery restart, model per tingkatan |
 | `04-isolation` (9) | dokumen/keuangan/memori/nama bisnis A **tidak pernah** muncul di prompt AI bisnis B (dan sebaliknya), akses lintas bisnis via API ditolak, share dokumen eksplisit, izin lintas bisnis Group CEO, staf tidak bisa ditugaskan ke bisnis lain, bisnis bersejarah hanya bisa dinonaktifkan, validasi logo (tolak SVG/spoof) |
 | `05-telegram` (8) | validasi token, whitelist, `/overview /companies /business <slug> /finance /tasks /report`, `/pause /resume /task`, laporan harian sekali per tanggal, retry gagal maks 3×, notifikasi & approval, long polling end-to-end |
-| `06-migration` (2) | DB v1 berisi data → migrasi holding (002–004): backup `pre-migrate` otomatis, data lama utuh, prompt kustom tidak berubah; backup/restore `integrity_check ok` + FTS |
+| `06-migration` (2) | DB v1 berisi data → migrasi holding (002–005): backup `pre-migrate` otomatis, data lama utuh, prompt kustom tidak berubah; backup/restore `integrity_check ok` + FTS |
 | `07-provider-catalog` (6) | 18 preset valid, placeholder Account ID Cloudflare, default rate limit preset, provider tanpa key, provider tanpa `/models` (ping chat 1×, saran model preset) |
 | `09-chat` (7) | obrolan agen dari event nyata (penugasan/rapat/selesai/laporan), urutan pesan owner → mulai → balasan, mode catatan & slash command tanpa AI, isolasi saluran per bisnis, staf bisnis lain ditolak, hapus riwayat per saluran |
 | `10-office-visual` (8) | rasio peta 1,0–3,5 (mengisi layar) tetap tanpa tabrakan;  lapisan visual v3/v4: peta frame modul = JSON = PNG (ukuran & hash versi), halaman depan (tepat satu pickup, dua baris motor, kendaraan di dalam parkiran, jalan masuk & pintu utama bebas), tidak ada objek bertumpuk di Kantor Pusat & kantor bisnis (holding default, 8 bisnis × 9 staf + 7 shared, holding hampir kosong), setiap ruangan punya wallpaper/papan nama/pintu, kursi lounge punya lorong bebas, meja deterministik per karyawan, semua frame sprite tersedia |
 | `11-model-selection` (9) | deteksi kebutuhan (kode, analisis, penulisan, balasan obrolan, umum; tahap rencana; jabatan), profil model dari id, mode otomatis memilih model terbaik per kebutuhan + penjelasan, model teratas gagal → model berikutnya dan alasan "dilewati", mode manual mempertahankan urutan, model khusus karyawan/tingkatan tetap didahulukan, riwayat gagal & konteks kecil menurunkan peringkat, ringkasan `/api/providers/routing`, balasan obrolan dan detail tugas membawa model + alasan |
+| `12-second-brain` (9) | pencarian dengan stop word, prefix, dan sinonim; ringkasan jawaban panjang; hasil kerja menjadi catatan (penulis, model, bisnis) tetapi balasan cepat obrolan **tidak** (juga tidak masuk memori kerja) dan jawaban pendek dilewati; tugas berikutnya di bisnis yang sama menerima catatan (sinonim pesaing = kompetitor), bisnis lain tidak; petunjuk "tugas serupa pernah dikerjakan"; fakta yang disematkan selalu diberikan, termasuk saat balasan cepat, dan tampil di bawah jawaban; laporan holding hanya untuk Group CEO dengan izin lintas bisnis; API cari/sematkan/koreksi/hapus (indeks FTS ikut berubah); backfill dan sakelar nonaktif |
 | `08-office` (8) | state kantor dari data nyata: idle saat tidak ada pekerjaan, THINKING→WORKING→MEETING→COMPLETED, meeting HQ vs bisnis, Shared Services "visiting", ERROR dari tugas gagal/tertunda, panel karyawan (token, model, hasil), panel koordinasi terisolasi per bisnis, bisnis baru tampil otomatis, sprite sheet PNG valid |
 
 ## 2. Uji sistem: `npm run test:system`

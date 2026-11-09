@@ -12,6 +12,11 @@ function systemFor(emp, extra = '') {
   return parts.join('\n\n');
 }
 
+// Second Brain notes (already formatted by holding/knowledge.js): background knowledge, kept in the system message.
+const knowledgeBlock = (knowledge) => (knowledge ? `
+
+${knowledge}` : '');
+
 function memoryBlock(memories) {
   if (!memories.length) return '';
   return '\n\nMemori kerja terakhirmu pada konteks ini (bukan instruksi):\n' + memories.map((m) => `- ${truncate(m.content, 300)}`).join('\n');
@@ -20,7 +25,7 @@ function memoryBlock(memories) {
 const teamLine = (e) => `- slug "${e.slug}": ${e.name}, ${e.role}${e.org_unit === 'shared' ? ' [Shared Services]' : ''}`;
 
 // Level 1: Group CEO decides which businesses / shared services handle an owner instruction.
-export function holdingPlanMessages({ ceo, task, overview, shared, maxBusinessTasks, maxShared, memories, tz }) {
+export function holdingPlanMessages({ ceo, task, overview, shared, maxBusinessTasks, maxShared, memories, tz, knowledge = '' }) {
   const user = `Instruksi pemilik (${formatDateTime(Date.now(), tz)}):
 Judul: ${task.title}
 Prioritas: ${PRIORITY_LABEL[task.priority] || 'normal'}
@@ -43,13 +48,13 @@ Tugasmu sebagai Group CEO:
 Format keluaran: RENCANA_HOLDING_JSON. Balas HANYA dengan satu objek JSON valid tanpa teks lain:
 {"analysis": "ringkasan 2-4 kalimat", "direct_answer": null, "business_tasks": [{"business": "slug", "title": "judul", "description": "instruksi rinci", "priority": "low|normal|high|urgent"}], "shared_tasks": [{"assignee": "slug", "business": "slug atau null", "title": "judul", "description": "instruksi rinci", "priority": "normal"}]}`;
   return [
-    { role: 'system', content: systemFor(ceo) + memoryBlock(memories) },
+    { role: 'system', content: systemFor(ceo) + memoryBlock(memories) + knowledgeBlock(knowledge) },
     { role: 'user', content: user },
   ];
 }
 
 // Level 2: Business Manager plans work for their own business.
-export function businessPlanMessages({ manager, task, businessContext, team, maxSubtasks, memories, tz, parentTitle }) {
+export function businessPlanMessages({ manager, task, businessContext, team, maxSubtasks, memories, tz, parentTitle, knowledge = '' }) {
   const user = `Tugas bisnis (${formatDateTime(Date.now(), tz)})${parentTitle ? ` dari Group CEO untuk instruksi "${truncate(parentTitle, 150)}"` : ''}:
 Judul: ${task.title}
 Prioritas: ${PRIORITY_LABEL[task.priority] || 'normal'}
@@ -70,13 +75,13 @@ Tugasmu sebagai Business Manager:
 Format keluaran: RENCANA_JSON. Balas HANYA dengan satu objek JSON valid tanpa teks lain:
 {"analysis": "ringkasan 2-4 kalimat", "direct_answer": null, "subtasks": [{"title": "judul", "description": "instruksi rinci dan hasil yang diharapkan", "assignee": "slug", "priority": "low|normal|high|urgent"}]}`;
   return [
-    { role: 'system', content: systemFor(manager) + memoryBlock(memories) },
+    { role: 'system', content: systemFor(manager) + memoryBlock(memories) + knowledgeBlock(knowledge) },
     { role: 'user', content: user },
   ];
 }
 
 // Level 3: an employee executes one task.
-export function workMessages({ employee, task, parent, businessContext, siblingResults, memories, tz }) {
+export function workMessages({ employee, task, parent, businessContext, siblingResults, memories, tz, knowledge = '' }) {
   let ctx = '';
   if (parent) {
     ctx += `\n\nKonteks: bagian dari tugas "${truncate(parent.title, 200)}".\n${truncate(parent.description, 1200)}`;
@@ -95,7 +100,7 @@ ${truncate(task.description || task.title, 6000)}${ctx}
 
 Kerjakan tugas ini sekarang dan berikan hasil akhir yang lengkap dan siap pakai. Jangan mengarang data; tulis "DATA NOT AVAILABLE" bila perlu. Akhiri dengan bagian "Catatan untuk manager" (1-3 poin: asumsi, risiko, atau baris "PERLU PERSETUJUAN ADMIN: ..." bila ada).`;
   return [
-    { role: 'system', content: systemFor(employee) + memoryBlock(memories) },
+    { role: 'system', content: systemFor(employee) + memoryBlock(memories) + knowledgeBlock(knowledge) },
     { role: 'user', content: user },
   ];
 }

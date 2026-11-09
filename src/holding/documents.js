@@ -1,6 +1,7 @@
 // Documents & knowledge base, scoped per business. Cross-business visibility only via explicit document_shares.
 import { q, now, tx } from '../db/index.js';
 import { truncate } from '../lib/text.js';
+import { ftsQuery } from '../lib/search.js'; // stop words, prefix match and business synonyms
 
 const MAX_CONTENT = 200 * 1024; // characters
 const TEXT_MIME = /^(text\/(plain|markdown|csv)|application\/json)$/;
@@ -80,16 +81,6 @@ export function setDocumentShares(id, ownerBusinessId, targetIds) {
   return clean;
 }
 
-function ftsQuery(text) {
-  const words = String(text || '')
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length >= 3)
-    .slice(0, 24);
-  return [...new Set(words)].map((w) => `"${w}"`).join(' OR ');
-}
 
 /**
  * Knowledge base search limited to one business (plus documents explicitly shared to it).

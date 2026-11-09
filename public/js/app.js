@@ -11,6 +11,7 @@ const ROUTES = [
   { path: 'organization', label: 'Organization', icon: '⌬', load: () => import('./views/organization.js') },
   { path: 'shared', label: 'Shared Services', icon: '◎', load: () => import('./views/shared.js') },
   { path: 'reports', label: 'Consolidated Reports', icon: '▥', load: () => import('./views/reports.js') },
+  { path: 'brain', label: 'Second Brain', icon: '✦', load: () => import('./views/brain.js') },
   { path: 'approvals', label: 'Approvals', icon: '✓', badge: 'approvals', load: () => import('./views/approvals.js') },
   { group: 'Operasional' },
   { path: 'tasks', label: 'Task Manager', icon: '☰', load: () => import('./views/tasks.js') },

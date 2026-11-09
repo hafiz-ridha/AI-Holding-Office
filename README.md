@@ -24,6 +24,7 @@ Dokumentasi:
 | Orkestrasi | Holding task → Business task → Employee subtask. Group CEO dapat menjawab langsung bila sederhana (hemat API) |
 | Isolasi data | `business_id` pada tugas, percakapan, memori, dokumen, laporan, keuangan, log; diuji otomatis terhadap kebocoran antarbisnis |
 | AI provider | 16 preset cloud gratis/kredit + 9Router + custom OpenAI-compatible; pemilihan model otomatis sesuai kebutuhan (dengan alasan di setiap jawaban), fallback, cooldown, batas request & token, model default per tingkatan |
+| Second Brain | Hasil kerja menjadi pengetahuan bersama semua karyawan dan semua model (FTS5 + sinonim), fakta yang disematkan, isolasi per bisnis, catatan yang dipakai tampil di bawah jawaban |
 | Telegram | Laporan harian holding (sekali per hari, tahan restart), notifikasi tugas/error/persetujuan, perintah `/overview /companies /business <slug> /report /tasks /finance /approvals /task /pause /resume` |
 | Kantor virtual | Pixel art top-down orisinal: Kantor Pusat (CEO Office, Meeting Room, Business Managers, Finance, Secretary, Research, Developer, HR, Marketing, Lounge) + satu kantor per bisnis (otomatis dari database). State IDLE/THINKING/WORKING/WALKING/MEETING/COMPLETED/ERROR (+ RESTING dari riwayat tugas) mengikuti data tugas nyata; klik karakter, meja, atau ruangan untuk detail; status bar, notifikasi, siang/malam, minimap |
 | Keamanan | Login scrypt, sesi HttpOnly, CSRF, rate limit, CSP ketat (koneksi keluar dari browser hanya ke Open-Meteo untuk cuaca otomatis), API key terenkripsi AES-256-GCM, whitelist Telegram, audit log, persetujuan owner untuk tindakan berisiko (AI tidak pernah mengeksekusi tindakan) |
@@ -115,6 +116,26 @@ Model khusus karyawan dan model per tingkatan tetap diutamakan bila diisi.
 Setiap jawaban mencantumkan model yang menjawab beserta alasannya: di obrolan (baris 🤖 di bawah balasan, klik
 untuk alasan lengkap), di detail tugas, di pembaca laporan, dan di notifikasi Telegram "Tugas selesai". Tambahkan
 beberapa model ke *Fallback* (tombol **Pilih model** → **+ Fallback**) agar router punya pilihan.
+
+### Second Brain (pengetahuan bersama semua model)
+
+Pengetahuan disimpan di database, bukan di dalam model. Karena itu semua AI gratis yang terhubung memakai pengetahuan
+yang sama dan bisa melanjutkan hasil model lain.
+
+- **Yang disimpan:** hanya hasil kerja, yaitu hasil tugas karyawan, laporan bisnis, dan laporan holding, ditambah
+  fakta yang Anda tulis. Setiap catatan mencatat siapa yang mengerjakan, model apa, dan tugas sumbernya. Balasan cepat
+  obrolan (sapaan, basa-basi, tanya jawab singkat) **tidak** disimpan, baik ke Second Brain maupun ke memori kerja;
+  balasan itu hanya ada di riwayat obrolan. Jawaban yang sangat pendek juga dilewati.
+- **Yang diberikan ke AI:** sebelum merencanakan atau mengerjakan tugas, AI menerima catatan paling relevan dari
+  lingkup yang sama (holding atau satu bisnis), ditambah fakta yang disematkan. Pencarian memakai kata kunci, sinonim
+  bisnis (omzet = pendapatan = revenue, pesaing = kompetitor, dst.), tingkat kepentingan, dan kebaruan. Bila tugas
+  serupa pernah dikerjakan, AI diminta memperbarui hasil lama, bukan mengulang dari nol.
+- **Isolasi:** catatan bisnis A tidak pernah diberikan ke bisnis B. Laporan konsolidasi holding hanya diberikan ke
+  Group CEO, dan hanya bila izin lintas bisnis aktif.
+- **Transparansi:** baris 🤖 di bawah jawaban menampilkan `📚 N catatan`; klik untuk melihat catatan yang dipakai.
+- **Menu Second Brain:** cari, tambah fakta, sematkan, koreksi, atau hapus catatan yang keliru. Pengaturan
+  (aktif/nonaktif, jumlah catatan per panggilan) ada di **Settings → Second Brain**. Hasil kerja sebelum update
+  otomatis dijadikan catatan sekali saat server pertama kali jalan.
 
 ## Cara menambahkan bisnis baru
 
@@ -242,11 +263,11 @@ Lihat [docs/DEPLOY-AAPANEL.md](docs/DEPLOY-AAPANEL.md) bagian 8–10. Ringkasnya
 
 ```
 src/            server.js, app.js, config.js, events.js
-  db/           SQLite wrapper, migration runner, migrations/001–004 (*.sql), seed.js
+  db/           SQLite wrapper, migration runner, migrations/001–005 (*.sql), seed.js
   auth/ lib/    sesi, CSRF guard, crypto, zona waktu, settings, rate limit, audit
   providers/    adapter OpenAI-compatible, OpenRouter, 9Router, Cloudflare, Gemini + katalog preset
   router/       Model Router (pemilihan model otomatis, fallback, cooldown, kuota, concurrency)
-  holding/      bisnis, dokumen/FTS, keuangan, laporan, approval, context (isolasi), task factory
+  holding/      bisnis, dokumen/FTS, Second Brain (knowledge), keuangan, laporan, approval, context (isolasi), task factory
   agents/       karyawan, prompt, orchestrator holding → bisnis → karyawan
   queue/        task queue berbasis SQLite + worker
   telegram/     client, bot (long polling), notifier, laporan

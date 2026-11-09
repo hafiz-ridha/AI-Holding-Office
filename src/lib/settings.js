@@ -65,6 +65,8 @@ export const SETTINGS = {
   max_model_attempts: { def: 4, validate: int(1, 10), label: 'Maksimum kandidat model per panggilan' },
   retry_delay_minutes: { def: 10, validate: int(1, 1440), label: 'Jeda sebelum tugas pending dicoba lagi (menit)' },
   memory_items: { def: 5, validate: int(0, 20), label: 'Jumlah memori kerja yang disertakan dalam prompt' },
+  knowledge_enabled: { def: true, validate: boolean, label: 'Second Brain: simpan hasil kerja sebagai catatan dan berikan catatan relevan ke AI' },
+  knowledge_items: { def: 4, validate: int(0, 10), label: 'Jumlah catatan Second Brain per panggilan AI' },
   queue_paused: { def: false, validate: boolean, label: 'Antrean dijeda' },
   timezone: { def: config.defaultTimezone, validate: tz, label: 'Zona waktu' },
   backup_enabled: { def: true, validate: boolean, label: 'Backup otomatis harian' },

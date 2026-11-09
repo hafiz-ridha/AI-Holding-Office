@@ -288,13 +288,23 @@ export function readFileAs(file, how = 'text') {
 
 // "Dijawab oleh …" line under an AI answer: which model wrote it and for which need; the AI router's explanation
 // (why that model was picked, what was skipped) opens on click.
-// info: { provider, model, need, text } — need/text come from the task's model_choice.
+// info: { provider, model, need, text, refs } — need/text come from the task's model_choice, refs are the Second
+// Brain notes the agent was given (numbered [K1], [K2] … in that order).
 export function modelNote(info, { open = false } = {}) {
   if (!info || !info.model) return null;
-  const head = `🤖 ${info.provider ? `${info.provider} / ` : ''}${info.model}${info.need ? ` · ${info.need}` : ''}`;
-  if (!info.text) return h('div', { class: 'model-note' }, head);
-  return h('details', { class: 'model-note', open }, h('summary', { title: 'Kenapa model ini?' }, head), h('div', { class: 'model-why' }, info.text));
+  const refs = info.refs || [];
+  const head = `🤖 ${info.provider ? `${info.provider} / ` : ''}${info.model}${info.need ? ` · ${info.need}` : ''}${refs.length ? ` · 📚 ${refs.length} catatan` : ''}`;
+  if (!info.text && !refs.length) return h('div', { class: 'model-note' }, head);
+  return h('details', { class: 'model-note', open },
+    h('summary', { title: 'Kenapa model ini, dan pengetahuan apa yang dipakai?' }, head),
+    h('div', { class: 'model-why' },
+      info.text ? h('div', null, info.text) : null,
+      refs.length
+        ? h('div', { class: 'model-refs' }, 'Second Brain: ', refs.map((r, i) => [i ? '; ' : '', h('a', { href: `#/brain/${r.id}` }, `[K${i + 1}] ${r.title}`)]))
+        : null));
 }
 
-// model info from a task row (provider_name, model_used, model_choice).
-export const taskModelInfo = (t) => (t?.model_used ? { provider: t.provider_name, model: t.model_used, need: t.model_choice?.need_label || null, text: t.model_choice?.text || null } : null);
+// model info from a task row (provider_name, model_used, model_choice, knowledge_refs).
+export const taskModelInfo = (t) => (t?.model_used
+  ? { provider: t.provider_name, model: t.model_used, need: t.model_choice?.need_label || null, text: t.model_choice?.text || null, refs: t.knowledge_refs || [] }
+  : null);

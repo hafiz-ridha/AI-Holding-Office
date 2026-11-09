@@ -6,7 +6,8 @@ import { getSetting } from '../lib/settings.js';
 import { extractJsonObject, estimateMessagesTokens, truncate } from '../lib/text.js';
 import { formatDateTime } from '../lib/time.js';
 import { routeChat, RouterError } from '../router/modelRouter.js';
-import { detectNeed } from '../router/modelSelector.js';
+import { detectNeed, isChatReply } from '../router/modelSelector.js';
+import { recallKnowledge, formatKnowledge, addKnowledgeRefs, captureTask } from '../holding/knowledge.js';
 import { getEmployee, getManager, recentMemories, addMemory } from './employees.js';
 import {
   holdingPlanMessages, businessPlanMessages, workMessages, businessSynthesisMessages, holdingSynthesisMessages,
@@ -56,12 +57,27 @@ async function callAI({ task, employee, messages, purpose, signal }) {
 const memo = (emp, task, text, importance = 1) =>
   addMemory(emp.id, task.id, `[${formatDateTime(Date.now(), getSetting('timezone'))}] ${task.title}: ${truncate(text, 300)}`, importance, task.business_id ?? null);
 
+// Second Brain notes relevant to this task (same business scope only), as a prompt block; remembers which were used.
+function brain(task, employee) {
+  try {
+    const r = recallKnowledge({ task, employee });
+    addKnowledgeRefs(task.id, r.notes);
+    return formatKnowledge(r, getSetting('timezone'));
+  } catch {
+    return ''; // knowledge is a bonus: never block the work
+  }
+}
+
 function finish(task, employee, content, { report = null } = {}) {
   if (report) {
     saveReport({ businessId: task.business_id ?? null, taskId: task.id, scope: report, title: task.title, content, employeeId: employee?.id ?? null });
   }
   if (report || task.kind === 'direct') createApprovalsFromResult(task, content);
-  return completeTask(task, content);
+  const done = completeTask(task, content);
+  try {
+    captureTask(done); // work results only; quick chat replies are skipped inside
+  } catch {}
+  return done;
 }
 
 function pick(list, key) {
@@ -81,7 +97,7 @@ async function planHolding(task, signal) {
   const maxShared = getSetting('max_shared_tasks');
   const messages = holdingPlanMessages({
     ceo, task, overview: text, shared, maxBusinessTasks, maxShared,
-    memories: recentMemories(ceo.id, getSetting('memory_items'), task.business_id ?? null), tz,
+    memories: recentMemories(ceo.id, getSetting('memory_items'), task.business_id ?? null), tz, knowledge: brain(task, ceo),
   });
   const res = await callAI({ task, employee: ceo, messages, purpose: 'plan', signal });
   const plan = extractJsonObject(res.content);
@@ -183,7 +199,7 @@ async function planBusiness(task, signal) {
   const messages = businessPlanMessages({
     manager: bm, task, team: maxSubtasks > 0 ? team : [], maxSubtasks,
     businessContext: businessContextText(bm, task, { kbQuery: `${task.title} ${task.description}` }),
-    memories: recentMemories(bm.id, getSetting('memory_items'), b.id), tz, parentTitle: parent?.title,
+    memories: recentMemories(bm.id, getSetting('memory_items'), b.id), tz, parentTitle: parent?.title, knowledge: brain(task, bm),
   });
   const res = await callAI({ task, employee: bm, messages, purpose: 'plan', signal });
   const plan = extractJsonObject(res.content);
@@ -254,9 +270,11 @@ async function runWork(task, signal) {
     employee, task, parent, siblingResults,
     businessContext: task.business_id ? businessContextText(employee, task, { kbQuery: `${task.title} ${task.description}` }) : '',
     memories: recentMemories(employee.id, getSetting('memory_items'), task.business_id ?? null), tz,
+    knowledge: brain(task, employee),
   });
   const res = await callAI({ task, employee, messages, purpose: 'work', signal });
-  memo(employee, task, res.content);
+  // Quick chat replies are conversation, not work: kept in the chat history only, not in working memory.
+  if (!isChatReply(task)) memo(employee, task, res.content);
   return finish(task, employee, res.content);
 }
 
