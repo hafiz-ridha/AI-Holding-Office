@@ -35,7 +35,7 @@ export async function startMockProvider({ key = 'test-key', delayMs = 0 } = {}) 
     if (req.url === '/v1/chat/completions') {
       const m = data.model;
       const lastUser = [...data.messages].reverse().find((x) => x.role === 'user')?.content || '';
-      if (m === 'fail-model') return send(500, { error: { message: 'upstream exploded' } });
+      if (m === 'fail-model' || m.startsWith('fail-')) return send(500, { error: { message: 'upstream exploded' } });
       if (m === 'rate-model') return send(429, { error: { message: 'Rate limit exceeded' } }, { 'retry-after': '30' });
       if (m === 'daily-model') return send(429, { error: { message: 'Rate limit exceeded: free-models-per-day' } });
       if (m === 'missing-model') return send(404, { error: { message: 'No endpoints found for model' } });

@@ -1,5 +1,5 @@
 import { get, post } from '../api.js';
-import { h, mount, badge, fmtDate, fmtNum, taskCode, md, toast, errToast, confirmDialog, KIND_LABEL, PRIORITY } from '../ui.js';
+import { h, mount, badge, fmtDate, fmtNum, taskCode, md, toast, errToast, confirmDialog, KIND_LABEL, PRIORITY, modelNote, taskModelInfo } from '../ui.js';
 
 const LEVEL = { holding: 'Holding task', business: 'Business task', employee: 'Employee subtask' };
 
@@ -39,6 +39,8 @@ export async function render(root, [id], ctx) {
             h('dt', null, 'Mulai'), h('dd', null, fmtDate(t.started_at)),
             h('dt', null, 'Selesai'), h('dd', null, fmtDate(t.completed_at)),
             h('dt', null, 'Provider / model'), h('dd', { class: 'mono small' }, t.model_used ? `${t.provider_name} / ${t.model_used}` : '-'),
+            t.model_choice ? h('dt', null, 'Pemilihan model') : null,
+            t.model_choice ? h('dd', { class: 'small' }, `${t.model_choice.mode === 'auto' ? 'Otomatis' : 'Manual'}${t.model_choice.need_label ? ` · kebutuhan: ${t.model_choice.need_label}` : ''}`) : null,
             h('dt', null, 'Token'), h('dd', null, `${fmtNum(t.tokens_in)} input + ${fmtNum(t.tokens_out)} output${t.tokens_estimated ? ` (±${fmtNum(t.tokens_estimated)} diestimasi)` : ''}${t.cost_usd ? ` · $${t.cost_usd.toFixed(5)}` : ''}`),
             h('dt', null, 'Percobaan'), h('dd', null, `${t.attempts}${t.next_attempt_at ? ` · berikutnya ${fmtDate(t.next_attempt_at)}` : ''}`)),
           t.error ? h('p', { class: 'form-error', style: { marginTop: '10px' } }, t.error) : null),
@@ -58,7 +60,8 @@ export async function render(root, [id], ctx) {
                 h('td', null, KIND_LABEL[c.kind]), h('td', null, c.business_name || 'Holding'), h('td', null, c.employee_name || '-'), h('td', null, badge(c.status))))))))
           : null,
         h('div', { class: 'card' }, h('div', { class: 'card-head' }, h('h3', null, 'Output'), t.result ? h('button', { class: 'btn btn-sm', type: 'button', onclick: () => navigator.clipboard?.writeText(t.result).then(() => toast('Disalin', 'ok')) }, 'Salin') : null),
-          t.result ? h('div', { class: 'result-box' }, md(t.result)) : h('p', { class: 'muted' }, active ? 'Sedang dikerjakan…' : 'Belum ada hasil.')),
+          t.result ? h('div', { class: 'result-box' }, md(t.result)) : h('p', { class: 'muted' }, active ? 'Sedang dikerjakan…' : 'Belum ada hasil.'),
+          t.result ? modelNote(taskModelInfo(t), { open: true }) : null),
         d.approvals.length
           ? h('div', { class: 'card' }, h('h3', null, 'Persetujuan owner'), d.approvals.map((a) => h('div', { class: 'list-item' }, h('div', { class: 'grow' }, a.detail), badge(a.status))), h('a', { href: '#/approvals', class: 'small' }, 'Kelola di Approvals →'))
           : null,

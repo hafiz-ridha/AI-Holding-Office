@@ -1,5 +1,5 @@
 import { get, post } from '../api.js';
-import { h, mount, fmtDate, md, modal, select, toast, errToast, emptyState } from '../ui.js';
+import { h, mount, fmtDate, md, modal, select, toast, errToast, emptyState, modelNote, taskModelInfo } from '../ui.js';
 
 export async function render(root, _params, ctx) {
   const businesses = await get('/api/businesses');
@@ -20,7 +20,7 @@ export async function render(root, _params, ctx) {
               h('td', { class: 'small' }, r.employee_name || '-'),
               h('td', null, h('button', { class: 'btn btn-sm', type: 'button', onclick: async () => {
                 const full = await get(`/api/reports/${r.id}`);
-                modal({ title: full.title, wide: true, body: h('div', null, h('p', { class: 'small muted' }, `${full.business_name || 'Holding'} · ${full.employee_name || ''} · ${fmtDate(full.created_at)}${full.task_id ? ` · tugas #${full.task_id}` : ''}`), h('div', { class: 'result-box' }, md(full.content))) });
+                modal({ title: full.title, wide: true, body: h('div', null, h('p', { class: 'small muted' }, `${full.business_name || 'Holding'} · ${full.employee_name || ''} · ${fmtDate(full.created_at)}${full.task_id ? ` · tugas #${full.task_id}` : ''}`), h('div', { class: 'result-box' }, md(full.content)), modelNote(taskModelInfo(full))) });
               } }, 'Baca'))))))))
         : emptyState('Belum ada laporan. Buat holding task, misalnya "Evaluasi seluruh bisnis bulan ini".', h('button', { class: 'btn btn-primary', type: 'button', onclick: () => ctx.openNewTask({ mode: 'holding' }) }, 'Buat holding task')));
   };

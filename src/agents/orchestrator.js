@@ -6,6 +6,7 @@ import { getSetting } from '../lib/settings.js';
 import { extractJsonObject, estimateMessagesTokens, truncate } from '../lib/text.js';
 import { formatDateTime } from '../lib/time.js';
 import { routeChat, RouterError } from '../router/modelRouter.js';
+import { detectNeed } from '../router/modelSelector.js';
 import { getEmployee, getManager, recentMemories, addMemory } from './employees.js';
 import {
   holdingPlanMessages, businessPlanMessages, workMessages, businessSynthesisMessages, holdingSynthesisMessages,
@@ -33,6 +34,7 @@ function outputBudget(task, employee, messages) {
 }
 
 async function callAI({ task, employee, messages, purpose, signal }) {
+  const need = detectNeed({ purpose, task, employee, inputTokens: estimateMessagesTokens(messages) });
   const res = await routeChat({
     messages,
     employee,
@@ -42,10 +44,12 @@ async function callAI({ task, employee, messages, purpose, signal }) {
     maxTokens: outputBudget(task, employee, messages),
     temperature: employee?.temperature ?? 0.7,
     signal,
+    need,
   });
   addUsageToTask(task.id, res);
   saveConversation(task.id, employee?.id ?? null, messages[messages.length - 1].content, res.content, res, task.business_id ?? null);
   logTask(task.id, 'ai_call', `${purpose}: ${res.providerName} / ${res.model} (${res.tokensIn}+${res.tokensOut} token${res.estimated ? ', estimasi' : ''})`);
+  if (res.choice) logTask(task.id, 'model_choice', res.choice.text);
   return res;
 }
 

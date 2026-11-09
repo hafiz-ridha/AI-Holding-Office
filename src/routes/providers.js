@@ -3,7 +3,7 @@ import {
   listModels, getProviderRow, toPublic,
 } from '../providers/service.js';
 import { PRESETS, CATEGORIES, EXCLUDED } from '../providers/registry.js';
-import { routeChat } from '../router/modelRouter.js';
+import { routeChat, routingOverview } from '../router/modelRouter.js';
 import { auditReq } from '../lib/audit.js';
 import { idParam, body, str, bool, intRange, httpError } from './schemas.js';
 
@@ -31,6 +31,9 @@ export default async function providerRoutes(app) {
   );
 
   app.get('/api/providers/catalog', async () => ({ categories: CATEGORIES, excluded: EXCLUDED }));
+
+  // Automatic model selection overview: best model per need + detected strengths of each configured model.
+  app.get('/api/providers/routing', async () => routingOverview());
 
   app.post('/api/providers', { schema: { body: body(fields, ['preset']) } }, async (req, reply) => {
     const p = createProvider(req.body);

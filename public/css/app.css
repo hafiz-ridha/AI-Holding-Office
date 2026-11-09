@@ -304,6 +304,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .chat-msg.k-approval .chat-body { border-color: color-mix(in srgb, var(--warn) 55%, var(--border)); }
 .chat-meta { display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: baseline; font-size: 12px; margin-bottom: 2px; }
 .chat-time { margin-left: auto; font-size: 11px; }
+/* "Dijawab oleh model …" under AI answers (chat, task output, reports); the router's reason opens on click. */
+.model-note { margin-top: 5px; font-size: 11px; color: var(--muted); line-height: 1.35; }
+.model-note > summary { cursor: pointer; list-style: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-note > summary::-webkit-details-marker { display: none; }
+.model-note > summary::after { content: ' ▸'; }
+.model-note[open] > summary::after { content: ' ▾'; }
+.model-note > summary:hover { color: var(--text); }
+.model-why { margin-top: 3px; padding: 5px 7px; border-left: 2px solid var(--primary); background: var(--surface); border-radius: 0 6px 6px 0; color: var(--text); white-space: normal; }
 .chat-kind { font-size: 11px; font-weight: 600; padding: 0 5px; border-radius: 4px; background: var(--surface); border: 1px solid var(--border); }
 .chat-kind.k-done, .chat-kind.k-report { color: var(--ok); }
 .chat-kind.k-fail { color: var(--err); }

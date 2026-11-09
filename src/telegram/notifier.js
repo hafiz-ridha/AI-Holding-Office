@@ -94,13 +94,22 @@ function onStarted({ task }) {
   );
 }
 
+// Why that model answered (stored by the AI router with the task), as one short italic line.
+function modelWhy(task) {
+  let c = null;
+  try {
+    c = task.model_choice ? JSON.parse(task.model_choice) : null;
+  } catch {}
+  return c?.text ? `\n<i>${escapeHtml(truncate(c.text, 300))}</i>` : '';
+}
+
 function onCompleted({ task }) {
   if (!ready('notify_task_completed', task)) return;
   const summary = truncate(String(task.result || '').replace(/```[\s\S]*?```/g, '[kode]'), 1200);
   enqueue(
     'task_completed',
     `✅ <b>Tugas selesai</b>${bizName(task)}\n<b>${code(task)}</b> ${escapeHtml(task.title)}\n` +
-      `Model: <code>${escapeHtml(task.provider_name || '-')} / ${escapeHtml(task.model_used || '-')}</code>\n\n${escapeHtml(summary)}`
+      `Model: <code>${escapeHtml(task.provider_name || '-')} / ${escapeHtml(task.model_used || '-')}</code>${modelWhy(task)}\n\n${escapeHtml(summary)}`
   );
 }
 

@@ -1,7 +1,7 @@
 // Agent chat card ("Obrolan agen"): real conversation feed from task events + owner messages.
 // Owner messages can be a note (no AI), a quick AI reply (1 call), or a full orchestrated task.
 import { get, post, del } from '../api.js';
-import { h, mount, clear, md, toast, errToast, confirmDialog, taskCode } from '../ui.js';
+import { h, mount, clear, md, toast, errToast, confirmDialog, taskCode, modelNote } from '../ui.js';
 import { avatarCanvas } from '../office/sprites.js';
 
 const KIND = {
@@ -82,6 +82,7 @@ export function createChat({ onAgentMessage } = {}) {
           channel === 'hq' && m.business_name ? h('span', { class: 'chat-biz', style: { '--biz': m.business_color } }, m.business_name) : null,
           h('span', { class: 'muted chat-time', title: new Date(m.created_at).toLocaleString('id-ID') }, fmtTime(m.created_at))),
         rich ? md(m.content) : h('div', { class: 'chat-text' }, m.content),
+        modelNote(m.model),
         m.task_id ? h('a', { class: 'small', href: `#/task/${m.task_id}` }, `${m.task_code || taskCode(m.task_id)} ↗`) : null));
   }
 

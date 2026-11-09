@@ -20,7 +20,7 @@ export async function editEmployee(e, done) {
   const prompt = h('textarea', { rows: 9, maxlength: 8000, placeholder: 'Kosongkan untuk prompt standar + aturan keamanan' }, e?.system_prompt || '');
   const provider = select([['', '— default tingkatan / provider default —'], ...providers.map((p) => [p.id, `${p.name}${p.enabled ? '' : ' (nonaktif)'}`])], e?.provider_id || '');
   const modelList = h('datalist', { id: 'emp-models' });
-  const model = h('input', { value: e?.model || '', maxlength: 200, list: 'emp-models', placeholder: 'Kosongkan untuk memakai default' });
+  const model = h('input', { value: e?.model || '', maxlength: 200, list: 'emp-models', placeholder: 'Kosongkan agar dipilih otomatis' });
   const loadModels = async () => {
     mount(modelList);
     const pid = provider.value || providers.find((p) => p.is_default)?.id;
@@ -61,7 +61,7 @@ export async function editEmployee(e, done) {
       h('div', { class: 'full field' }, h('span', null, 'Bisnis yang ditangani'), h('div', { class: 'row', style: { gap: '4px 16px' } }, bizBoxes.length ? bizBoxes.map((x) => x.el) : h('span', { class: 'muted small' }, 'Belum ada bisnis'))),
       h('div', { class: 'full' }, field('Kepribadian', personality)),
       h('div', { class: 'full' }, field('System prompt', prompt, 'Aturan keamanan (tanpa eksekusi tindakan, DATA NOT AVAILABLE, PERLU PERSETUJUAN ADMIN) disarankan tetap ada.')),
-      field('Provider khusus', provider, 'Kosong = model default tingkatan, lalu provider default.'),
+      field('Provider khusus', provider, 'Kosong = model tingkatan bila diatur, selain itu dipilih otomatis sesuai kebutuhan tugas.'),
       field('Model khusus', h('div', null, model, modelList)),
       field('Temperature', temp), field('Maks token output (0 = global)', maxTok),
       h('div', { class: 'full field' }, h('span', null, 'Avatar pixel art'),

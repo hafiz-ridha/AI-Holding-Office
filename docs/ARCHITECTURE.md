@@ -17,7 +17,7 @@ Semua angka resource di bagian "Estimasi resource" adalah **estimasi** awal. Ang
 |---|---|
 | RAM/CPU minimal | Satu proses Node.js, satu container, SQLite in-process, tanpa framework frontend, tanpa build step. |
 | Tanpa LLM lokal | Semua inferensi lewat HTTP ke provider (OpenRouter, 9Router, OpenAI-compatible). |
-| Model bisa diganti | Provider, model default, fallback, dan model per karyawan disimpan di DB dan diubah dari dashboard. |
+| Model bisa diganti | Provider, model default, fallback, model per karyawan, dan mode pemilihan model (otomatis/manual) disimpan di DB dan diubah dari dashboard. |
 | AI hanya bekerja saat ada tugas | Tidak ada loop "berpikir" otomatis. Panggilan AI hanya terjadi saat task queue mengambil tugas. |
 | Aman secara default | AI hanya menghasilkan teks. Tidak ada tool eksekusi (hapus file, shell, email, transaksi). Rekomendasi berisiko ditandai "PERLU PERSETUJUAN ADMIN". |
 | Mudah dipelihara | 2 dependency runtime (Fastify + @fastify/static). Sisanya modul bawaan Node.js. |
@@ -94,11 +94,29 @@ Jika CEO menilai instruksi sederhana, CEO menjawab langsung (1 panggilan).
 ### Model Router — urutan kandidat
 
 1. Provider + model pilihan karyawan (jika diisi).
-2. Provider default + model default.
-3. Model fallback provider default (daftar berurutan dari admin, termasuk model gratis).
-4. Provider cadangan lain yang aktif (urut prioritas): model default lalu fallback-nya.
-5. Semua gagal → tugas kembali `pending` dengan jadwal ulang (backoff), notifikasi System Alert.
+2. Model default tingkatan (`tier_models`, jika diisi).
+3. Provider default + model default.
+4. Model fallback provider default (daftar berurutan dari admin, termasuk model gratis).
+5. Provider cadangan lain yang aktif (urut prioritas): model default lalu fallback-nya.
+6. Semua gagal → tugas kembali `pending` dengan jadwal ulang (backoff), notifikasi System Alert.
    Setelah `max_task_attempts` (default 3) → `failed`.
+
+**Pemilihan model otomatis** (`model_routing = auto`, default; `src/router/modelSelector.js`): kandidat 3–5
+diurutkan ulang untuk setiap panggilan, sedangkan 1–2 (pilihan admin) tetap di depan.
+
+- `detectNeed()` membaca judul/deskripsi tugas (kata kunci ID/EN, blok kode), tujuan panggilan (`plan` →
+  analisis, `synthesis` → penulisan), jabatan karyawan, dan penanda balasan obrolan. Hasilnya `coding`,
+  `reasoning`, `writing`, `quick`, atau `general`, plus sinyal yang terdeteksi dan flag input panjang.
+- `profileModel()` menebak kekuatan model dari id-nya (keluarga model dikenal + ukuran parameter `70b`, `120b`,
+  dst.) dan katalog yang disinkron (panjang konteks, gratis/berbayar). Id yang tidak dikenali berprofil netral,
+  sehingga urutan admin tetap berlaku.
+- `rankCandidates()` memberi skor: bobot tag/ukuran per kebutuhan, bonus kecil untuk model default provider
+  utama, penalti gagal 24 jam (`usage_logs`), penalti konteks terlalu kecil untuk input panjang, penalti kecil
+  model berbayar. Tanpa panggilan AI tambahan.
+- `describeChoice()` menyusun penjelasan (mode, kebutuhan, alasan, peringkat, model yang dilewati). Penjelasan
+  disimpan di `tasks.model_choice` (migrasi `004`, JSON), dicatat di log tugas (`model_choice`), dan ditampilkan
+  di obrolan, detail tugas, pembaca laporan, serta notifikasi Telegram.
+- `GET /api/providers/routing` menampilkan pilihan utama per kebutuhan dan profil tiap model terpasang.
 
 Kandidat dilewati bila: provider nonaktif, provider/model sedang cooldown (429, kuota habis,
 model tidak ditemukan), batas request harian provider atau global tercapai.

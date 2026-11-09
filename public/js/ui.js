@@ -285,3 +285,16 @@ export function readFileAs(file, how = 'text') {
     else r.readAsText(file);
   });
 }
+
+// "Dijawab oleh …" line under an AI answer: which model wrote it and for which need; the AI router's explanation
+// (why that model was picked, what was skipped) opens on click.
+// info: { provider, model, need, text } — need/text come from the task's model_choice.
+export function modelNote(info, { open = false } = {}) {
+  if (!info || !info.model) return null;
+  const head = `🤖 ${info.provider ? `${info.provider} / ` : ''}${info.model}${info.need ? ` · ${info.need}` : ''}`;
+  if (!info.text) return h('div', { class: 'model-note' }, head);
+  return h('details', { class: 'model-note', open }, h('summary', { title: 'Kenapa model ini?' }, head), h('div', { class: 'model-why' }, info.text));
+}
+
+// model info from a task row (provider_name, model_used, model_choice).
+export const taskModelInfo = (t) => (t?.model_used ? { provider: t.provider_name, model: t.model_used, need: t.model_choice?.need_label || null, text: t.model_choice?.text || null } : null);

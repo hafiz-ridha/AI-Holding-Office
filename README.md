@@ -23,7 +23,7 @@ Dokumentasi:
 | Organisasi | Owner → Group CEO → Business Manager → staf bisnis; Shared Services (Group Finance, Secretary, Researcher, Developer, HR). Semua karyawan adalah profil yang berbagi satu AI router |
 | Orkestrasi | Holding task → Business task → Employee subtask. Group CEO dapat menjawab langsung bila sederhana (hemat API) |
 | Isolasi data | `business_id` pada tugas, percakapan, memori, dokumen, laporan, keuangan, log; diuji otomatis terhadap kebocoran antarbisnis |
-| AI provider | 16 preset cloud gratis/kredit + 9Router + custom OpenAI-compatible; fallback, cooldown, batas request & token, model default per tingkatan |
+| AI provider | 16 preset cloud gratis/kredit + 9Router + custom OpenAI-compatible; pemilihan model otomatis sesuai kebutuhan (dengan alasan di setiap jawaban), fallback, cooldown, batas request & token, model default per tingkatan |
 | Telegram | Laporan harian holding (sekali per hari, tahan restart), notifikasi tugas/error/persetujuan, perintah `/overview /companies /business <slug> /report /tasks /finance /approvals /task /pause /resume` |
 | Kantor virtual | Pixel art top-down orisinal: Kantor Pusat (CEO Office, Meeting Room, Business Managers, Finance, Secretary, Research, Developer, HR, Marketing, Lounge) + satu kantor per bisnis (otomatis dari database). State IDLE/THINKING/WORKING/WALKING/MEETING/COMPLETED/ERROR (+ RESTING dari riwayat tugas) mengikuti data tugas nyata; klik karakter, meja, atau ruangan untuk detail; status bar, notifikasi, siang/malam, minimap |
 | Keamanan | Login scrypt, sesi HttpOnly, CSRF, rate limit, CSP ketat (koneksi keluar dari browser hanya ke Open-Meteo untuk cuaca otomatis), API key terenkripsi AES-256-GCM, whitelist Telegram, audit log, persetujuan owner untuk tindakan berisiko (AI tidak pernah mengeksekusi tindakan) |
@@ -99,8 +99,22 @@ dan router otomatis pindah ke model/provider cadangan saat kena 429 atau kuota h
 karena free tier-nya dihentikan pada 30-07-2026.
 
 Urutan pemilihan model: model khusus karyawan → model default tingkatan (Group CEO / Business Manager /
-Shared Services / staf bisnis) → model default provider default → model fallback → provider cadangan →
+Shared Services / staf bisnis) → **model terbaik untuk kebutuhan tugas (otomatis)** → provider cadangan →
 tugas ditunda (pending) dengan notifikasi. Jumlah percobaan dibatasi, sehingga tidak ada retry tanpa batas.
+
+### Pemilihan model otomatis
+
+Aktif secara default (**AI Providers → Pemilihan model otomatis**; bisa diganti ke *Manual*). Sebelum tiap
+panggilan AI, router mengenali kebutuhannya dari isi tugas, tahap kerja (rencana/kerja/rangkuman), dan jabatan
+karyawan: **Pemrograman & teknis**, **Analisis & perencanaan**, **Penulisan & konten**, **Balasan cepat**,
+atau **Umum**. Model yang Anda pasang (model default + fallback tiap provider aktif) lalu diurutkan menurut
+kecocokan (spesialis kode, kuat penalaran, besar/ringan, cepat), riwayat gagal 24 jam, dan ukuran konteks. Proses
+ini tidak memanggil AI tambahan. Bila model teratas gagal atau kuotanya habis, model berikutnya dipakai.
+Model khusus karyawan dan model per tingkatan tetap diutamakan bila diisi.
+
+Setiap jawaban mencantumkan model yang menjawab beserta alasannya: di obrolan (baris 🤖 di bawah balasan, klik
+untuk alasan lengkap), di detail tugas, di pembaca laporan, dan di notifikasi Telegram "Tugas selesai". Tambahkan
+beberapa model ke *Fallback* (tombol **Pilih model** → **+ Fallback**) agar router punya pilihan.
 
 ## Cara menambahkan bisnis baru
 
@@ -228,10 +242,10 @@ Lihat [docs/DEPLOY-AAPANEL.md](docs/DEPLOY-AAPANEL.md) bagian 8–10. Ringkasnya
 
 ```
 src/            server.js, app.js, config.js, events.js
-  db/           SQLite wrapper, migration runner, migrations/001_init.sql, 002_holding.sql, seed.js
+  db/           SQLite wrapper, migration runner, migrations/001–004 (*.sql), seed.js
   auth/ lib/    sesi, CSRF guard, crypto, zona waktu, settings, rate limit, audit
   providers/    adapter OpenAI-compatible, OpenRouter, 9Router, Cloudflare, Gemini + katalog preset
-  router/       Model Router (fallback, cooldown, kuota, concurrency)
+  router/       Model Router (pemilihan model otomatis, fallback, cooldown, kuota, concurrency)
   holding/      bisnis, dokumen/FTS, keuangan, laporan, approval, context (isolasi), task factory
   agents/       karyawan, prompt, orchestrator holding → bisnis → karyawan
   queue/        task queue berbasis SQLite + worker

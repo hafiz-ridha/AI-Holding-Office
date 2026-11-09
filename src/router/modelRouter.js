@@ -8,6 +8,7 @@ import { ProviderError } from '../providers/base.js';
 import { adapterFor, setProviderStatus, modelPricing } from '../providers/service.js';
 import { bus } from '../events.js';
 import { tierOf } from '../agents/employees.js';
+import { rankCandidates, describeChoice, strengthsOf, NEEDS } from './modelSelector.js';
 
 export class RouterError extends Error {
   // kind: no_provider | quota | all_failed | cancelled
@@ -107,6 +108,28 @@ export function buildCandidates(employee = null) {
     for (const m of fallbacks(p)) push(p, m, 'backup-fallback');
   }
   return list;
+}
+
+// What automatic selection would pick for each kind of need, plus the detected profile of every configured model
+// (AI Providers page). Employee/tier pins are per person, so they are not part of this overview.
+export function routingOverview() {
+  const pool = buildCandidates(null);
+  let profiles = null;
+  const needs = Object.entries(NEEDS).map(([key, label]) => {
+    const { list, scored } = rankCandidates(pool, { key, label, signals: [], long: false, inputTokens: 0 });
+    profiles ||= scored;
+    const top = list[0];
+    return top
+      ? { key, label, provider: top.provider.name, model: top.model, reasons: scored.get(top).pros.slice(0, 3), runner_up: list[1] ? `${list[1].provider.name} / ${list[1].model}` : null }
+      : { key, label, provider: null, model: null, reasons: [], runner_up: null };
+  });
+  const models = pool.map((c) => ({
+    provider: c.provider.name,
+    model: c.model,
+    source: c.source,
+    strengths: profiles ? strengthsOf(profiles.get(c).profile) : [],
+  }));
+  return { mode: getSetting('model_routing'), needs, models };
 }
 
 function requestsToday(providerId = null) {
@@ -218,18 +241,24 @@ function computeCost(providerId, model, result) {
 
 /**
  * Run a chat completion through the routing chain.
- * @returns {Promise<{content, providerId, providerName, model, tokensIn, tokensOut, estimated, costUsd, attempts}>}
+ * @param {object|null} [opts.need] result of detectNeed(); with model_routing = 'auto' the candidates are ranked for it
+ * @returns {Promise<{content, providerId, providerName, model, tokensIn, tokensOut, estimated, costUsd, attempts, choice}>}
  */
-export async function routeChat({ messages, employee = null, taskId = null, businessId = null, purpose = 'work', maxTokens, temperature, signal, candidates = null }) {
+export async function routeChat({ messages, employee = null, taskId = null, businessId = null, purpose = 'work', maxTokens, temperature, signal, candidates = null, need = null }) {
   const maxDaily = getSetting('max_daily_requests');
   if (maxDaily > 0 && requestsToday() >= maxDaily) {
     alert('global-daily', 'Batas request harian tercapai', `Batas ${maxDaily} request/hari sudah tercapai. Tugas ditunda.`);
     throw new RouterError(`Batas ${maxDaily} request AI per hari tercapai`, 'quota');
   }
-  const list = candidates || buildCandidates(employee);
+  let list = candidates || buildCandidates(employee);
   if (!list.length) {
     throw new RouterError('Belum ada provider AI aktif dengan model default. Atur di menu AI Providers.', 'no_provider');
   }
+  // Automatic selection: rank the configured models for what this call needs (explicit candidate lists, e.g. model
+  // tests, and calls without a detected need keep the configured order).
+  const mode = !candidates && need && getSetting('model_routing') === 'auto' ? 'auto' : 'manual';
+  let scored = null;
+  if (mode === 'auto') ({ list, scored } = rankCandidates(list, need));
 
   const maxCandidates = getSetting('max_model_attempts');
   const attempts = [];
@@ -291,6 +320,7 @@ export async function routeChat({ messages, employee = null, taskId = null, busi
             costUsd,
             finishReason: res.finishReason,
             attempts,
+            choice: describeChoice({ mode, need, chosen: c, list, scored, attempts, tier: employee ? tierOf(employee) : null }),
           };
         } catch (e) {
           if (e instanceof RouterError) throw e;

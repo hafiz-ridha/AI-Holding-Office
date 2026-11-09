@@ -1,5 +1,5 @@
 // Business reports (scope=business) and consolidated holding reports (scope=holding).
-import { q, now } from '../db/index.js';
+import { q, now, json } from '../db/index.js';
 import { truncate } from '../lib/text.js';
 
 export function saveReport({ businessId = null, taskId = null, scope, title, content, employeeId = null }) {
@@ -31,9 +31,12 @@ export function listReports({ businessId, scope = null, limit = 50 } = {}) {
 }
 
 export function getReport(id) {
-  return q.get(
-    `SELECT r.*, b.name AS business_name, e.name AS employee_name FROM business_reports r
-     LEFT JOIN businesses b ON b.id = r.business_id LEFT JOIN employees e ON e.id = r.employee_id WHERE r.id = ?`,
+  const r = q.get(
+    `SELECT r.*, b.name AS business_name, e.name AS employee_name, t.provider_name, t.model_used, t.model_choice
+     FROM business_reports r LEFT JOIN businesses b ON b.id = r.business_id LEFT JOIN employees e ON e.id = r.employee_id
+       LEFT JOIN tasks t ON t.id = r.task_id WHERE r.id = ?`,
     id
   );
+  if (r) r.model_choice = json(r.model_choice, null);
+  return r;
 }

@@ -55,13 +55,36 @@ export function listMessages({ businessId, after = 0, before = null, limit = 60 
     vals.push(before);
   }
   const rows = q.all(
-    `SELECT m.*, e.avatar AS sender_avatar, e.role AS sender_role, b.name AS business_name, b.color AS business_color
+    `SELECT m.*, e.avatar AS sender_avatar, e.role AS sender_role, b.name AS business_name, b.color AS business_color,
+       t.provider_name AS ai_provider, t.model_used AS ai_model, t.model_choice AS ai_choice
      FROM chat_messages m LEFT JOIN employees e ON e.id = m.sender_employee_id LEFT JOIN businesses b ON b.id = m.business_id
+       LEFT JOIN tasks t ON t.id = m.task_id
      ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY m.id ${after ? 'ASC' : 'DESC'} LIMIT ?`,
     ...vals, limit
   );
   const list = after ? rows : rows.reverse();
-  return list.map((m) => ({ ...m, sender_avatar: json(m.sender_avatar, null), task_code: m.task_id ? code(m.task_id) : null }));
+  return list.map(({ ai_provider, ai_model, ai_choice, ...m }) => ({
+    ...m,
+    sender_avatar: json(m.sender_avatar, null),
+    task_code: m.task_id ? code(m.task_id) : null,
+    model: answerModel(m, ai_provider, ai_model, ai_choice),
+  }));
+}
+
+// Which model wrote an agent's answer (chat reply, finished subtask, report) and why it was picked. Other messages
+// (assignments, "started", notes, system lines) are not AI answers and carry no model.
+const ANSWER_KINDS = new Set(['message', 'done', 'report']);
+function answerModel(m, provider, model, choice) {
+  if (m.sender_type !== 'employee' || !ANSWER_KINDS.has(m.kind) || !model) return null;
+  const c = json(choice, null);
+  return {
+    provider,
+    model,
+    mode: c?.mode || null,
+    need: c?.need_label || null,
+    text: c?.text || null,
+    strengths: c?.strengths || [],
+  };
 }
 
 // Employees currently running an AI call in this channel (real "typing" indicator).

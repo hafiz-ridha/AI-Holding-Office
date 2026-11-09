@@ -166,6 +166,33 @@ function modelsDialog(p) {
   load();
 }
 
+// Automatic model selection: on/off + what it would pick for each kind of need, and how each model was profiled.
+async function routingCard(done) {
+  const r = await get('/api/providers/routing');
+  const mode = select([['auto', 'Otomatis: model terbaik sesuai kebutuhan'], ['manual', 'Manual: default lalu cadangan']], r.mode);
+  return h('div', { class: 'card stack-sm' },
+    h('div', { class: 'card-head' }, h('h2', null, 'Pemilihan model otomatis'),
+      h('div', { class: 'row', style: { gap: '6px' } }, mode, h('button', { class: 'btn btn-sm btn-primary', type: 'button', onclick: async () => {
+        await put('/api/settings', { model_routing: mode.value }).then(() => toast(mode.value === 'auto' ? 'Pemilihan model otomatis aktif' : 'Mode manual aktif', 'ok')).catch(errToast);
+        done();
+      } }, 'Simpan'))),
+    h('p', { class: 'small muted', style: { margin: 0 } },
+      'Setiap panggilan AI dikenali kebutuhannya dari isi tugas, tahap kerja, dan jabatan karyawan. Model yang Anda pasang (model default + fallback tiap provider) lalu diurutkan menurut kecocokan, riwayat berhasil 24 jam, dan ukuran konteks. Proses ini tidak menambah request AI. Bila model teratas gagal atau kuotanya habis, model berikutnya dipakai. Model khusus karyawan dan model per tingkatan tetap diutamakan bila diisi. Setiap jawaban mencantumkan model yang menjawab beserta alasannya.'),
+    r.models.length < 2
+      ? h('p', { class: 'small', style: { margin: 0, color: 'var(--warn)' } }, 'Baru ada 1 model terpasang, jadi belum ada pilihan. Tambahkan model lain lewat "Pilih model" lalu "+ Fallback", atau pasang provider kedua.')
+      : null,
+    h('div', { class: 'table-wrap' }, h('table', null,
+      h('thead', null, h('tr', null, h('th', null, 'Kebutuhan'), h('th', null, r.mode === 'auto' ? 'Pilihan utama' : 'Pilihan bila otomatis'), h('th', null, 'Alasan'))),
+      h('tbody', null, r.needs.map((n) => h('tr', null,
+        h('td', { class: 'nowrap' }, h('strong', null, n.label)),
+        h('td', { class: 'mono small' }, n.model ? `${n.provider} / ${n.model}` : '-', n.runner_up ? h('div', { class: 'muted' }, `cadangan: ${n.runner_up}`) : null),
+        h('td', { class: 'small muted' }, n.reasons.join(', ') || 'urutan admin')))))),
+    h('details', null, h('summary', { class: 'small' }, `Profil ${r.models.length} model terpasang`),
+      h('div', { class: 'table-wrap' }, h('table', null, h('tbody', null, r.models.map((m) => h('tr', null,
+        h('td', { class: 'mono small' }, `${m.provider} / ${m.model}`),
+        h('td', { class: 'small muted' }, m.strengths.join(', ') || 'belum dikenali: dipakai sesuai urutan admin'))))))));
+}
+
 async function tierCard(providers, done) {
   const s = await get('/api/settings');
   const tiers = s.values.tier_models;
@@ -181,7 +208,7 @@ async function tierCard(providers, done) {
       await put('/api/settings', { tier_models: v }).then(() => toast('Model per tingkatan disimpan', 'ok')).catch(errToast);
       done();
     } }, 'Simpan')),
-    h('p', { class: 'small muted' }, 'Urutan pemilihan: model khusus karyawan → model tingkatan → model default provider default → fallback (utamakan model gratis) → provider cadangan. Semua memakai satu AI router bersama.'),
+    h('p', { class: 'small muted' }, 'Opsional. Bila diisi, model ini selalu dicoba lebih dulu untuk tingkatan tersebut, juga saat pemilihan otomatis aktif. Kosongkan agar model dipilih otomatis sesuai kebutuhan. Urutan: model khusus karyawan → model tingkatan → model pilihan otomatis (atau default lalu fallback pada mode manual) → provider cadangan.'),
     h('div', { class: 'table-wrap' }, h('table', null, h('tbody', null, rows.map((r) => h('tr', null, h('td', null, h('strong', null, r.label)), h('td', { style: { minWidth: '160px' } }, r.prov), h('td', { style: { minWidth: '220px' } }, r.model)))))));
 }
 
@@ -235,6 +262,7 @@ export async function render(root, _params, ctx) {
                 draw();
               }, 'btn-sm btn-ghost btn-danger')))))
         : h('div', { class: 'card' }, emptyState('AI belum terintegrasi: belum ada provider. Pilih provider dari katalog di atas (mis. Groq, Gemini, OpenRouter), tempel API key, lalu klik Test connection.')),
+      list.length ? await routingCard(draw) : null,
       list.length ? await tierCard(list, draw) : null));
   };
   await draw();

@@ -36,7 +36,17 @@ const tierModels = (v) => {
   return out;
 };
 
+const oneOf = (...values) => (v) => {
+  if (!values.includes(v)) throw new Error(`harus salah satu dari: ${values.join(', ')}`);
+  return v;
+};
+
 export const SETTINGS = {
+  model_routing: {
+    def: 'auto',
+    validate: oneOf('auto', 'manual'),
+    label: 'Pemilihan model AI: auto = pilih model terbaik sesuai kebutuhan tugas, manual = urutan default lalu cadangan',
+  },
   tier_models: {
     def: Object.fromEntries(TIERS.map((t) => [t, { provider_id: null, model: null }])),
     validate: tierModels,

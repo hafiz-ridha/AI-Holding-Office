@@ -96,13 +96,14 @@ export function claimNext(busyEmployeeIds = []) {
 export function addUsageToTask(taskId, r) {
   q.run(
     `UPDATE tasks SET tokens_in = tokens_in + ?, tokens_out = tokens_out + ?, tokens_estimated = tokens_estimated + ?,
-       cost_usd = cost_usd + ?, provider_name = ?, model_used = ?, updated_at = ? WHERE id = ?`,
+       cost_usd = cost_usd + ?, provider_name = ?, model_used = ?, model_choice = ?, updated_at = ? WHERE id = ?`,
     r.tokensIn,
     r.tokensOut,
     r.estimated ? r.tokensIn + r.tokensOut : 0,
     r.costUsd || 0,
     r.providerName,
     r.model,
+    r.choice ? JSON.stringify(r.choice) : null,
     now(),
     taskId
   );
@@ -317,6 +318,7 @@ export function taskPublic(t, extra = {}) {
     error: t.error,
     provider_name: t.provider_name,
     model_used: t.model_used,
+    model_choice: json(t.model_choice, null),
     tokens_in: t.tokens_in,
     tokens_out: t.tokens_out,
     tokens_estimated: t.tokens_estimated,
