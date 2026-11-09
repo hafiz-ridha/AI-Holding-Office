@@ -1,5 +1,5 @@
 import { q } from '../db/index.js';
-import { toPublic, updateTelegramSettings, getTelegramRow, getClient } from '../telegram/settings.js';
+import { toPublic, updateTelegramSettings, getTelegramRow, getClient, lastCommandChat, chatLabel } from '../telegram/settings.js';
 import { sendText, recordMessage } from '../telegram/notifier.js';
 import { buildHoldingReport, buildBusinessReport } from '../telegram/report.js';
 import { runDailyReport } from '../scheduler/index.js';
@@ -30,13 +30,17 @@ export default async function telegramRoutes(app) {
     bot: bot.state,
     commands: COMMANDS.map(([c, d]) => ({ command: `/${c}`, description: d })),
     today_report: q.get("SELECT status, attempts, error, updated_at FROM telegram_reports WHERE type = 'daily_report' ORDER BY id DESC LIMIT 1") || null,
+    // Latest automatic send (not a command reply) and the chat an allowed user last wrote from: lets the page
+    // offer a one-click fix when the configured Chat ID does not work.
+    last_auto: q.get("SELECT status, chat_id, error, created_at FROM telegram_reports WHERE type != 'command' ORDER BY id DESC LIMIT 1") || null,
+    last_command_chat: lastCommandChat(),
   }));
 
   app.put('/api/telegram', { schema: { body: body(fields) } }, async (req) => {
     const r = await updateTelegramSettings(req.body);
     auditReq(req, 'telegram_updated', null, { fields: Object.keys(req.body).filter((k) => k !== 'bot_token'), token_changed: r.tokenChanged });
     if (r.tokenChanged || r.pollingChanged) await bot.start(req.log);
-    return { settings: r.settings, bot: bot.state };
+    return { settings: r.settings, bot: bot.state, chat: r.chat && typeof r.chat === 'object' ? { id: r.chat.id, type: r.chat.type, label: chatLabel(r.chat) } : null };
   });
 
   app.post('/api/telegram/test', async (req) => {

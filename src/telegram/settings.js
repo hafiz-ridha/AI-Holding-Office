@@ -58,11 +58,47 @@ const BOOL_FIELDS = [
   'notify_task_failed', 'notify_system_alert', 'notify_subtasks',
 ];
 
-// Returns { settings, tokenChanged }.
+// A chat the bot must be able to reach. Common mistakes get a clear message instead of a later "chat not found".
+async function checkChat(chatId, token) {
+  const botId = String(token || '').split(':')[0];
+  if (botId && chatId === botId) {
+    throw httpError('Chat ID ini adalah ID bot Anda sendiri (angka sebelum ":" di token), bukan ID Anda. Kirim /start ke bot untuk melihat User ID Anda, atau kirim /setchat dari chat tujuan.');
+  }
+  if (!token) return null;
+  try {
+    return await new TelegramClient(token).getChat(chatId);
+  } catch (e) {
+    if (e.status === 400 || e.status === 403) {
+      throw httpError(`Bot tidak bisa mengirim ke Chat ID ${chatId} (${e.message.replace(/^Telegram:\s*/, '')}). Pastikan Anda sudah menekan Start di chat pribadi dengan bot, atau bot sudah ditambahkan ke grup/channel (channel: jadikan admin). Cara termudah: kirim /setchat dari chat tujuan.`);
+    }
+    return null; // network problem: keep the value, sending will report it
+  }
+}
+
+export function chatLabel(chat) {
+  if (!chat || typeof chat !== 'object') return '';
+  if (chat.type === 'private') return [chat.first_name, chat.last_name].filter(Boolean).join(' ') + (chat.username ? ` (@${chat.username})` : '') || 'chat pribadi';
+  return `${chat.title || chat.username || 'chat'} (${chat.type === 'channel' ? 'channel' : 'grup'})`;
+}
+
+// The chat an allowed user last sent a command from (offered on the dashboard when automatic sends fail).
+export function rememberCommandChat(chat, from) {
+  if (!chat?.id) return;
+  const v = JSON.stringify({ chat_id: String(chat.id), label: chatLabel(chat) || String(chat.id), user_id: String(from?.id || ''), at: now() });
+  q.run("INSERT OR REPLACE INTO system_settings(key, value, updated_at) VALUES ('_telegram_last_chat', ?, ?)", v, now());
+}
+
+export function lastCommandChat() {
+  return json(q.get("SELECT value FROM system_settings WHERE key = '_telegram_last_chat'")?.value, null);
+}
+
+// Returns { settings, tokenChanged, chat }.
 export async function updateTelegramSettings(data) {
   const sets = [];
   const vals = [];
   let tokenChanged = false;
+  let chat = null;
+  let newToken = null;
   if (typeof data.bot_token === 'string' && data.bot_token.trim()) {
     const token = data.bot_token.trim();
     if (!/^\d{5,15}:[A-Za-z0-9_-]{30,}$/.test(token)) throw httpError('Format bot token tidak valid (contoh: 123456:ABC...)');
@@ -76,6 +112,7 @@ export async function updateTelegramSettings(data) {
     sets.push('bot_token_enc = ?', 'bot_token_hint = ?', 'bot_username = ?', 'last_update_id = 0');
     vals.push(encryptSecret(token), maskSecret(token), me.username || '');
     tokenChanged = true;
+    newToken = token;
   } else if (data.clear_bot_token) {
     sets.push('bot_token_enc = NULL', 'bot_token_hint = NULL', 'bot_username = NULL');
     tokenChanged = true;
@@ -83,6 +120,9 @@ export async function updateTelegramSettings(data) {
   if ('chat_id' in data) {
     const c = String(data.chat_id || '').trim();
     if (c && !/^-?\d{1,20}$/.test(c) && !/^@[A-Za-z0-9_]{5,64}$/.test(c)) throw httpError('Chat ID harus angka (contoh: 123456789 atau -100123...) atau @channel');
+    const row = getTelegramRow();
+    // Checked against Telegram when it changes (or the token changes): the bot must be able to reach that chat.
+    if (c && (c !== row?.chat_id || newToken)) chat = await checkChat(c, newToken || getBotToken());
     sets.push('chat_id = ?');
     vals.push(c || null);
   }
@@ -115,7 +155,7 @@ export async function updateTelegramSettings(data) {
     vals.push(now());
     q.run(`UPDATE telegram_settings SET ${sets.join(', ')} WHERE id = 1`, ...vals);
   }
-  return { settings: toPublic(), tokenChanged, pollingChanged: 'polling_enabled' in data };
+  return { settings: toPublic(), tokenChanged, pollingChanged: 'polling_enabled' in data, chat };
 }
 
 export function setLastUpdateId(id) {

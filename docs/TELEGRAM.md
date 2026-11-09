@@ -50,7 +50,12 @@ Semua pengaturan ini juga tersedia lewat tombol: kirim `/mybots`, pilih bot, lal
 4. Kembali ke dashboard. Isi angka tersebut di dua kolom, lalu klik **Simpan**:
    - **User ID yang diizinkan memberi perintah**.
    - **Chat ID tujuan laporan**. Untuk chat pribadi, Chat ID sama dengan User ID.
-5. Kirim `/start` sekali lagi. Sekarang bot menyapa Anda, menampilkan Chat ID, dan daftar perintah.
+5. Kirim `/start` sekali lagi. Sekarang bot menyapa Anda, menampilkan Chat ID, ke mana laporan otomatis dikirim, dan daftar
+   perintah.
+
+   > **Cara termudah menentukan tujuan laporan:** kirim `/setchat` dari chat tujuan (chat pribadi dengan bot atau grup).
+   > Chat itu langsung menjadi tujuan laporan & notifikasi otomatis. Chat ID yang diisi manual dicek ke Telegram saat
+   > disimpan. Angka di depan token (sebelum `:`) adalah ID bot, **bukan** Chat ID Anda.
 6. Klik **Kirim pesan tes**. Jika pesan "Tes AI Virtual Holding" masuk di Telegram, koneksi selesai.
 7. Untuk laporan harian, centang **Laporan harian otomatis** (bawaan mati). Atur **Jam laporan harian** dan
    **Zona waktu** (default `Asia/Jakarta`), lalu **Simpan**. Klik **Kirim laporan sekarang** untuk mencoba tanpa menunggu jam laporan.
@@ -66,7 +71,8 @@ izin, dipisah koma.
 2. Tambahkan bot ke grup seperti menambah anggota biasa.
 3. Di grup, kirim `/start@username_bot`. Sertakan nama bot agar perintah sampai walaupun privacy mode aktif.
    Pengirimnya harus sudah ada di daftar User ID yang diizinkan.
-4. Bot membalas Chat ID grup. Untuk grup, angkanya negatif, misalnya `-1001234567890`. Isi angka itu di **Chat ID tujuan laporan**,
+4. Kirim `/setchat@username_bot` di grup itu untuk langsung menjadikannya tujuan laporan. Cara manual: bot membalas
+   Chat ID grup (angka negatif, misalnya `-1001234567890`); isi angka itu di **Chat ID tujuan laporan**,
    klik **Simpan**, lalu klik **Kirim pesan tes**.
 
 Semua anggota grup bisa membaca laporan, tetapi hanya User ID di daftar izin yang bisa memberi perintah. Di grup,
@@ -95,7 +101,9 @@ publik. Untuk channel privat, isi dengan ID `-100…`, yang terlihat di alamat T
 | `Tidak dapat terhubung ke Telegram` atau `Timeout` | Server tidak bisa mengakses `api.telegram.org`. Periksa firewall, DNS, atau proxy VPS. |
 | Status **Error** atau **Tidak aktif**, bot diam | Pastikan **Terima perintah (long polling)** tercentang, lalu klik **Simpan**. Baca pesan di bawah status. |
 | Bot membalas "Akses ditolak" | User ID belum ada di daftar izin, atau belum disimpan. |
-| Pesan tes gagal `chat not found` | Chat ID salah, Anda belum pernah menekan **Start** di bot (bot tidak bisa memulai chat duluan), atau bot belum dimasukkan ke grup. |
+| Pesan tes gagal `chat not found` | Chat ID salah, Anda belum pernah menekan **Start** di bot (bot tidak bisa memulai chat duluan), atau bot belum dimasukkan ke grup. Kirim `/setchat` dari chat tujuan. |
+| Perintah seperti `/report` dibalas, tetapi laporan/notifikasi otomatis gagal `chat not found` | Balasan perintah dikirim ke chat asal perintah; laporan otomatis dikirim ke **Chat ID tujuan laporan** yang tersimpan, dan nilainya salah (sering: ID bot dari token, salah ketik, atau ID grup tanpa `-100`). Kirim `/setchat` dari chat tujuan, atau klik **Pakai chat ini sebagai tujuan** pada kartu peringatan di halaman Telegram. |
+| Grup diubah menjadi supergroup | ID grup berubah; aplikasi mengikuti ID baru secara otomatis saat mengirim. |
 | `bot was blocked by the user` | Buka bot di Telegram, lalu pilih **Unblock** atau **Restart**. |
 | `409 Conflict` | Token yang sama sedang dipakai server lain. Matikan instance lain atau buat bot baru. Webhook lama dihapus otomatis oleh aplikasi. |
 | Di grup bot tidak merespons | Tulis perintah dengan nama bot (`/overview@username_bot`), dan pastikan pengirim ada di daftar izin. |

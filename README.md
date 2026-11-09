@@ -249,8 +249,9 @@ Panduan lengkap, termasuk pengaturan BotFather, grup/channel, keamanan token, da
 1. Di Telegram buka [@BotFather](https://t.me/BotFather), kirim `/newbot`, isi nama dan username (harus diakhiri `bot`),
    lalu salin token yang diberikan.
 2. Di dashboard buka menu **Telegram**, tempel token, lalu klik **Simpan**. Status berubah menjadi **Aktif @username_bot**.
-3. Kirim `/start` ke bot. Bot membalas User ID Anda. Isi angka itu di **User ID yang diizinkan** dan **Chat ID tujuan
-   laporan** (untuk chat pribadi angkanya sama), lalu klik **Simpan**.
+3. Kirim `/start` ke bot. Bot membalas User ID Anda. Isi angka itu di **User ID yang diizinkan**, lalu klik **Simpan**.
+   Lalu kirim `/setchat` dari chat tujuan (pribadi atau grup): chat itu menjadi tujuan laporan & notifikasi otomatis.
+   Chat ID yang diisi manual dicek ke Telegram saat disimpan.
 4. Klik **Kirim pesan tes**. Untuk laporan harian, centang **Laporan harian otomatis** dan atur jamnya (zona waktu default Asia/Jakarta).
 
 Menu perintah bot terisi otomatis, jadi `/setcommands` di BotFather tidak diperlukan. Panduan yang sama tersedia di
@@ -269,6 +270,7 @@ Perintah yang tersedia:
 | `/approvals` | Persetujuan yang menunggu |
 | `/task <instruksi>` | Tugas ke Group CEO |
 | `/task @slug <instruksi>` | Tugas ke Business Manager bisnis tersebut |
+| `/setchat` | Jadikan chat ini (pribadi/grup) tujuan laporan & notifikasi otomatis |
 | `/status`, `/today`, `/pause`, `/resume`, `/help` | Status, ringkasan hari ini, kontrol antrean |
 
 ## Kantor virtual (pixel art)

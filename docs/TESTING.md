@@ -8,7 +8,7 @@ Semua pengujian AI memakai server **mock** OpenAI-compatible & Telegram lokal (`
 Integrasi dengan API key asli (OpenRouter, Groq, Gemini, 9Router, Telegram) **belum diuji** karena tidak ada
 kredensial; dashboard menyediakan *Test connection* untuk memverifikasinya setelah key diisi.
 
-## 1. Tes otomatis: `npm test` → 120/120 lulus
+## 1. Tes otomatis: `npm test` → 123/123 lulus
 
 | File | Cakupan |
 |---|---|
@@ -16,7 +16,7 @@ kredensial; dashboard menyediakan *Test connection* untuk memverifikasinya setel
 | `02-router` (11) | key terenkripsi & tersamar, test connection, sinkron model + deteksi gratis, key salah, 9Router tidak terjangkau/tidak kompatibel, fallback model, preferensi karyawan, cooldown 429, kuota harian, batas request global, batas kandidat, CRUD karyawan |
 | `03-orchestrator` (11) | Group CEO → Business Manager → staf → laporan bisnis → laporan holding, Shared Services per bisnis, jawaban langsung (1 panggilan), business task langsung, approval owner, pending → failed, cancel berantai, pause/resume, batas token, recovery restart, model per tingkatan |
 | `04-isolation` (9) | dokumen/keuangan/memori/nama bisnis A **tidak pernah** muncul di prompt AI bisnis B (dan sebaliknya), akses lintas bisnis via API ditolak, share dokumen eksplisit, izin lintas bisnis Group CEO, staf tidak bisa ditugaskan ke bisnis lain, bisnis bersejarah hanya bisa dinonaktifkan, validasi logo (tolak SVG/spoof) |
-| `05-telegram` (8) | validasi token, status bot langsung tampil setelah disimpan, whitelist, `/overview /companies /business <slug> /finance /tasks /report`, `/pause /resume /task`, laporan harian sekali per tanggal, retry gagal maks 3×, notifikasi & approval, long polling end-to-end |
+| `05-telegram` (11) | validasi token, status bot langsung tampil setelah disimpan, Chat ID dicek ke Telegram saat disimpan (ID bot ditolak, chat tak terjangkau ditolak), `/setchat` & `/start` menunjukkan tujuan laporan, error "chat not found" dijelaskan, migrasi grup → supergroup diikuti, whitelist, `/overview /companies /business <slug> /finance /tasks /report`, `/pause /resume /task`, laporan harian sekali per tanggal, retry gagal maks 3×, notifikasi & approval, long polling end-to-end |
 | `06-migration` (2) | DB v1 berisi data → migrasi holding (002–006): backup `pre-migrate` otomatis, data lama utuh, prompt kustom tidak berubah; backup/restore `integrity_check ok` + FTS |
 | `07-provider-catalog` (6) | 18 preset valid, placeholder Account ID Cloudflare, default rate limit preset, provider tanpa key, provider tanpa `/models` (ping chat 1×, saran model preset) |
 | `09-chat` (7) | obrolan agen dari event nyata (penugasan/rapat/selesai/laporan), urutan pesan owner → mulai → balasan, mode catatan & slash command tanpa AI, isolasi saluran per bisnis, staf bisnis lain ditolak, hapus riwayat per saluran |

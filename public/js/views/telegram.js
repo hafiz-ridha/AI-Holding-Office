@@ -21,7 +21,7 @@ function setupGuide(s, history, open, onToggle) {
       ', isi nama tampilan, lalu username yang diakhiri ', kbd('bot'), ' (mis. holding_saya_bot). BotFather membalas token seperti ', kbd('123456789:AAH…'), '.']],
     [s.has_bot_token, 'Tempel token, lalu Simpan.', ['Isi kolom "Bot token" di bawah. Token dicek ke Telegram dan disimpan terenkripsi, lalu status berubah menjadi Aktif. Jangan bagikan token ke siapa pun.']],
     [s.allowed_user_ids.length > 0 && Boolean(s.chat_id), 'Kirim /start ke bot, lalu daftarkan ID Anda.', ['Buka ', botLink, ' dan tekan Start. Bot membalas "Akses ditolak. User ID Telegram Anda: …". Isi angka itu di ',
-      h('strong', null, 'User ID yang diizinkan'), ' dan ', h('strong', null, 'Chat ID tujuan laporan'), ' (untuk chat pribadi angkanya sama), lalu Simpan.']],
+      h('strong', null, 'User ID yang diizinkan'), ', lalu Simpan. Setelah itu kirim ', kbd('/setchat'), ' dari chat tujuan (chat pribadi atau grup): chat itu langsung menjadi tujuan laporan.']],
     [delivered, 'Klik Kirim pesan tes.', ['Jika pesan "Tes AI Virtual Holding" masuk di Telegram, koneksi selesai. Bila gagal, lihat error di Riwayat notifikasi.']],
     [s.report_enabled, 'Nyalakan laporan harian.', ['Centang "Laporan harian otomatis", atur jam dan zona waktu, lalu Simpan. Coba dengan "Kirim laporan sekarang".']],
   ];
@@ -68,9 +68,9 @@ export async function render(root, _params, ctx) {
         ...Object.fromEntries(flags.map((f) => [f.key, f.i.checked])),
       };
       if (token.value.trim()) body.bot_token = token.value.trim();
-      await put('/api/telegram', body);
+      const r = await put('/api/telegram', body);
       token.value = '';
-      toast('Pengaturan Telegram disimpan', 'ok');
+      toast(r.chat?.label ? `Pengaturan disimpan · tujuan laporan: ${r.chat.label}` : 'Pengaturan Telegram disimpan', 'ok');
       draw();
     };
     const btn = (label, fn, cls = '') => h('button', { class: `btn ${cls}`, type: 'button', onclick: async (ev) => {
@@ -84,14 +84,34 @@ export async function render(root, _params, ctx) {
       }
     } }, label);
     const essentials = s.has_bot_token && s.allowed_user_ids.length > 0 && Boolean(s.chat_id);
+    // Automatic sends failing (wrong Chat ID) while commands work: offer the chat the owner last wrote from.
+    const lc = d.last_command_chat;
+    const la = d.last_auto;
+    const broken = s.has_bot_token && (!s.chat_id || (la?.status === 'failed' && la.chat_id === s.chat_id && /chat not found|Chat ID|blocked|kicked|not a member/i.test(la.error || '')));
+    const fixCard = broken
+      ? h('div', { class: 'card tg-fix stack-sm' },
+          h('strong', null, s.chat_id ? `Pengiriman otomatis gagal ke Chat ID ${s.chat_id}` : 'Chat ID tujuan laporan belum diatur'),
+          la?.error && s.chat_id ? h('div', { class: 'small muted' }, la.error) : null,
+          h('div', { class: 'small' }, 'Balasan perintah (mis. /report) tetap jalan karena dikirim ke chat asal perintah, sedangkan laporan & notifikasi otomatis dikirim ke Chat ID di bawah.'),
+          lc && lc.chat_id !== s.chat_id
+            ? h('div', { class: 'row' },
+                h('span', { class: 'small grow' }, 'Perintah terakhir Anda datang dari ', h('b', null, lc.label), ` (Chat ID ${lc.chat_id}).`),
+                btn('Pakai chat ini sebagai tujuan', async () => {
+                  const r = await put('/api/telegram', { chat_id: lc.chat_id });
+                  toast(`Tujuan laporan: ${r.chat?.label || lc.label}`, 'ok');
+                  draw();
+                }, 'btn-primary btn-sm'))
+            : h('div', { class: 'small' }, 'Cara termudah: buka chat tujuan (chat pribadi dengan bot atau grup), lalu kirim ', h('span', { class: 'kbd' }, '/setchat'), '.'))
+      : null;
     mount(root, h('div', { class: 'stack' },
+      fixCard,
       setupGuide(s, history, guideOpen ?? !essentials, (v) => { guideOpen = v; }),
       h('div', { class: 'grid grid-2' },
         h('div', { class: 'card stack' },
           h('div', { class: 'row-between' }, h('h2', null, 'Konfigurasi bot'), botBadge(d.bot, s.bot_username)),
           d.bot.message ? h('p', { class: 'small muted', style: { margin: 0 } }, d.bot.message) : null,
           field('Bot token (dari @BotFather)', token, 'Divalidasi ke Telegram lalu disimpan terenkripsi.'),
-          field('Chat ID tujuan laporan', chat, 'Chat pribadi: sama dengan User ID Anda. Grup: angka negatif yang dibalas bot setelah /start@username_bot.'),
+          field('Chat ID tujuan laporan', chat, 'Dicek ke Telegram saat disimpan. Paling mudah: kirim /setchat dari chat tujuan. Chat pribadi = User ID Anda (bukan angka di depan token); grup = angka negatif (-100…).'),
           field('User ID yang diizinkan memberi perintah', users, 'Perintah dari user lain diabaikan. /start menampilkan User ID pengirim.'),
           h('div', { class: 'form-grid' }, field('Jam laporan harian', time), field('Zona waktu', tz)),
           h('div', { class: 'stack-sm' }, flags.map((f) => f.el)),

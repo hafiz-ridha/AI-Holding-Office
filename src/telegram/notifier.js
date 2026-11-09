@@ -21,21 +21,37 @@ export function recordMessage({ type, chatId, status, message, error = null, rep
   return r.lastInsertRowid;
 }
 
+// Telegram errors with what to do about them (shown in the notification history and on the dashboard).
+export function explainTelegramError(message) {
+  const m = String(message || '');
+  if (/chat not found/i.test(m)) return `${m} — Chat ID tujuan salah, atau bot belum di-Start di chat itu / belum ada di grup. Kirim /setchat dari chat tujuan, atau perbaiki Chat ID di dashboard → Telegram.`;
+  if (/bot was blocked by the user/i.test(m)) return `${m} — Buka bot di Telegram lalu tekan Restart/Unblock.`;
+  if (/bot was kicked|bot is not a member/i.test(m)) return `${m} — Tambahkan bot lagi ke grup/channel, lalu kirim /setchat dari sana.`;
+  if (/not enough rights|have no rights/i.test(m)) return `${m} — Jadikan bot admin dengan izin mengirim pesan.`;
+  return m;
+}
+
 // Sends (splitting long text). Throws on failure.
 export async function sendText(chatId, html, client = getClient()) {
   if (!client) throw new Error('Bot token belum diatur');
-  if (!chatId) throw new Error('Chat ID belum diatur');
+  if (!chatId) throw new Error('Chat ID belum diatur. Kirim /setchat dari chat tujuan, atau isi Chat ID di dashboard → Telegram.');
   for (const part of splitMessage(html)) {
     try {
       await client.sendMessage(chatId, part);
     } catch (e) {
-      if (e.retryAfter) {
+      if (e.migrateTo) {
+        // The group became a supergroup (new id): follow it, also for the configured report chat.
+        q.run('UPDATE telegram_settings SET chat_id = ?, updated_at = ? WHERE id = 1 AND chat_id = ?', String(e.migrateTo), now(), String(chatId));
+        chatId = e.migrateTo;
+        await client.sendMessage(chatId, part);
+      } else if (e.retryAfter) {
         await new Promise((r) => setTimeout(r, Math.min(e.retryAfter, 30) * 1000));
         await client.sendMessage(chatId, part);
       } else if (/can't parse entities/i.test(e.message)) {
         // Fallback: plain text if HTML formatting got broken by splitting.
         await client.call('sendMessage', { chat_id: chatId, text: part.replace(/<[^>]+>/g, '') });
       } else {
+        e.message = explainTelegramError(e.message);
         throw e;
       }
     }

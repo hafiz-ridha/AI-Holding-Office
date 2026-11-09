@@ -1,5 +1,6 @@
 // Telegram: settings validation, whitelist, commands (incl. dynamic /business <slug>), holding daily report
-// sent exactly once per day, retry after failure, notifications, bot long polling end-to-end.
+// sent exactly once per day, retry after failure, notifications, bot long polling end-to-end, and the report
+// destination: Chat ID checked on save, /setchat, explained "chat not found", supergroup migration.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { setupEnv, buildTestApp, login } from './helpers.js';
@@ -160,4 +161,76 @@ test('long polling end-to-end: authorised command gets a reply, stranger is igno
   assert.ok(!tg.sent.some((m) => m.chat_id === 888), 'stranger got no reply');
   assert.equal(q.get('SELECT last_update_id FROM telegram_settings').last_update_id, 11);
   await bot.stop();
+});
+
+const DEST = '-100123456';
+const restore = () => {
+  q.run('UPDATE telegram_settings SET chat_id = ? WHERE id = 1', DEST);
+  tg.state.unknownChats.clear();
+  tg.state.migrate = null;
+};
+
+test('a wrong Chat ID is caught on save: the bot\'s own id and a chat the bot cannot reach', async () => {
+  try {
+    const own = await s.put('/api/telegram', { chat_id: tg.token.split(':')[0] });
+    assert.equal(own.statusCode, 400);
+    assert.match(own.json().error, /ID bot Anda sendiri/);
+    tg.state.unknownChats.add('5550009');
+    const unknown = await s.put('/api/telegram', { chat_id: '5550009' });
+    assert.equal(unknown.statusCode, 400);
+    assert.match(unknown.json().error, /tidak bisa mengirim ke Chat ID 5550009[\s\S]*\/setchat/);
+    assert.equal(q.get('SELECT chat_id FROM telegram_settings').chat_id, DEST, 'nothing saved');
+    const ok = await s.put('/api/telegram', { chat_id: String(OWNER.id) });
+    assert.equal(ok.statusCode, 200, ok.body);
+    assert.equal(ok.json().chat.label, 'Owner (@owner_holding)');
+    // Saving other fields does not re-check an unchanged chat.
+    tg.state.unknownChats.add(String(OWNER.id));
+    assert.equal((await s.put('/api/telegram', { report_time: '18:30' })).statusCode, 200);
+  } finally {
+    restore();
+  }
+});
+
+test('/setchat makes the current chat the report destination; /start says where reports go', async () => {
+  try {
+    const chat = { id: 777, type: 'private', first_name: 'Owner' };
+    const start = await handleCommand('/start', OWNER, 777, 'Asia/Jakarta', chat);
+    assert.match(start, new RegExp(`dikirim ke Chat ID <code>${DEST}</code>[\\s\\S]*/setchat`));
+    assert.equal(await handleCommand('/setchat', STRANGER, 888, 'Asia/Jakarta', { id: 888, type: 'private' }), undefined, 'strangers cannot');
+    assert.equal(q.get('SELECT chat_id FROM telegram_settings').chat_id, DEST);
+    const set = await handleCommand('/setchat', OWNER, 777, 'Asia/Jakarta', chat);
+    assert.match(set, /sekarang dikirim ke chat ini \(Owner\)/);
+    assert.equal(q.get('SELECT chat_id FROM telegram_settings').chat_id, '777');
+    assert.ok(q.get("SELECT COUNT(*) n FROM audit_logs WHERE action = 'telegram_chat_set'").n >= 1);
+    assert.match(await handleCommand('/start', OWNER, 777, 'Asia/Jakarta', chat), /dikirim ke chat ini/);
+    // The dashboard knows the chat the owner last wrote from (offered as a one-click fix).
+    const d = (await s.get('/api/telegram')).json();
+    assert.equal(d.last_command_chat.chat_id, '777');
+    assert.equal(d.last_command_chat.label, 'Owner');
+    assert.ok(d.commands.some((c) => c.command === '/setchat'));
+  } finally {
+    restore();
+  }
+});
+
+test('automatic sends: "chat not found" is explained; a group upgraded to a supergroup is followed', async () => {
+  try {
+    tg.state.unknownChats.add('424242');
+    q.run('UPDATE telegram_settings SET chat_id = ? WHERE id = 1', '424242');
+    await assert.rejects(notifier.sendText('424242', 'halo'), /chat not found[\s\S]*\/setchat/);
+    const test = (await s.post('/api/telegram/test')).json();
+    assert.equal(test.ok, false);
+    assert.match(test.error, /\/setchat/);
+    const d = (await s.get('/api/telegram')).json();
+    assert.equal(d.last_auto.status, 'failed');
+    assert.equal(d.last_auto.chat_id, '424242');
+    // Supergroup migration: the new id is used and saved as the destination.
+    q.run('UPDATE telegram_settings SET chat_id = ? WHERE id = 1', '-200');
+    tg.state.migrate = { from: '-200', to: -1009999 };
+    await notifier.sendText('-200', 'halo grup');
+    assert.equal(tg.sent.at(-1).chat_id, -1009999);
+    assert.equal(q.get('SELECT chat_id FROM telegram_settings').chat_id, '-1009999');
+  } finally {
+    restore();
+  }
 });

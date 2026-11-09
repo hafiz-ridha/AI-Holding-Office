@@ -2,12 +2,13 @@
 import { config } from '../config.js';
 
 export class TelegramError extends Error {
-  constructor(message, { status = null, code = null, retryAfter = null } = {}) {
+  constructor(message, { status = null, code = null, retryAfter = null, migrateTo = null } = {}) {
     super(message);
     this.name = 'TelegramError';
     this.status = status;
     this.code = code;
     this.retryAfter = retryAfter;
+    this.migrateTo = migrateTo; // a group was upgraded to a supergroup: its new chat id
   }
 }
 
@@ -48,6 +49,7 @@ export class TelegramClient {
         status: res.status,
         code: data?.error_code,
         retryAfter: data?.parameters?.retry_after ?? null,
+        migrateTo: data?.parameters?.migrate_to_chat_id ?? null,
       });
     }
     return data.result;
@@ -73,6 +75,11 @@ export class TelegramClient {
       { offset, timeout: timeoutSec, allowed_updates: ['message'] },
       { timeoutMs: (timeoutSec + 15) * 1000, signal }
     );
+  }
+
+  // Checks that the bot can reach a chat (the bot must have been started there / be a member of the group).
+  getChat(chatId) {
+    return this.call('getChat', { chat_id: chatId });
   }
 
   deleteWebhook() {

@@ -4,7 +4,7 @@ import { escapeHtml, truncate } from '../lib/text.js';
 import { getSetting, setSetting } from '../lib/settings.js';
 import { audit } from '../lib/audit.js';
 import { bus } from '../events.js';
-import { getTelegramRow, getClient, allowedUserIds, setLastUpdateId } from './settings.js';
+import { getTelegramRow, getClient, allowedUserIds, setLastUpdateId, updateTelegramSettings, rememberCommandChat, chatLabel } from './settings.js';
 import { sendText, recordMessage } from './notifier.js';
 import { buildHoldingReport, buildBusinessReport, buildFinanceReport } from './report.js';
 import { findBusiness } from '../holding/businesses.js';
@@ -20,6 +20,7 @@ const COMMANDS = [
   ['finance', 'Ringkasan keuangan bulan ini'],
   ['approvals', 'Persetujuan owner yang menunggu'],
   ['task', 'Buat tugas: /task <instruksi> atau /task @slug <instruksi>'],
+  ['setchat', 'Jadikan chat ini tujuan laporan & notifikasi otomatis'],
   ['status', 'Status antrean & provider AI'],
   ['today', 'Ringkasan aktivitas hari ini'],
   ['pause', 'Jeda antrean tugas AI'],
@@ -107,7 +108,15 @@ function approvalsText() {
     '\n\nPutuskan di dashboard → Approvals.';
 }
 
-export async function handleCommand(text, from, chatId, tz) {
+// Where automatic reports go, compared with the chat a command came from.
+function destinationLine(chatId) {
+  const dest = getTelegramRow()?.chat_id;
+  if (!dest) return 'Chat ID tujuan laporan otomatis belum diatur. Kirim /setchat untuk memakai chat ini.';
+  if (dest === String(chatId)) return '✅ Laporan & notifikasi otomatis dikirim ke chat ini.';
+  return `Laporan & notifikasi otomatis saat ini dikirim ke Chat ID <code>${escapeHtml(dest)}</code>. Kirim /setchat untuk memakai chat ini.`;
+}
+
+export async function handleCommand(text, from, chatId, tz, chat = null) {
   const m = String(text || '').trim().match(/^\/([a-zA-Z_]+)(?:@\w+)?\s*([\s\S]*)$/);
   if (!m) return null;
   const cmd = m[1].toLowerCase();
@@ -118,9 +127,19 @@ export async function handleCommand(text, from, chatId, tz) {
   }
   if (!allowed) return undefined; // silently ignore unauthorised users
   const actor = `telegram:${from.id}`;
+  rememberCommandChat(chat || { id: chatId }, from);
   switch (cmd) {
     case 'start':
-      return `Halo ${escapeHtml(from.first_name || '')}! Chat ID ini: <code>${chatId}</code>\n\n${helpText()}`;
+      return `Halo ${escapeHtml(from.first_name || '')}! Chat ID ini: <code>${chatId}</code>\n${destinationLine(chatId)}\n\n${helpText()}`;
+    case 'setchat': {
+      try {
+        await updateTelegramSettings({ chat_id: String(chatId) });
+      } catch (e) {
+        return `Gagal memakai chat ini: ${escapeHtml(e.message)}`;
+      }
+      audit({ actor, action: 'telegram_chat_set', detail: { via: 'telegram', chat_id: String(chatId) } });
+      return `✅ Laporan harian & notifikasi otomatis sekarang dikirim ke chat ini${chat ? ` (${escapeHtml(chatLabel(chat))})` : ''}.\nChat ID: <code>${chatId}</code>`;
+    }
     case 'help':
       return helpText();
     case 'overview':
@@ -257,7 +276,7 @@ class Bot {
     if (!msg?.text || !msg.text.startsWith('/')) return;
     const row = getTelegramRow();
     const tz = row?.timezone || 'Asia/Jakarta';
-    const reply = await handleCommand(msg.text, msg.from, msg.chat.id, tz);
+    const reply = await handleCommand(msg.text, msg.from, msg.chat.id, tz, msg.chat);
     if (reply === undefined) {
       this.log.info?.(`Telegram: perintah dari user tidak diizinkan (${msg.from?.id}) diabaikan`);
       return;

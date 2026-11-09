@@ -367,6 +367,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .web-refs a { overflow-wrap: anywhere; }
 .cat-chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); vertical-align: 1px; }
 .cat-chip.imp { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+/* Telegram: one-click fix when automatic sends fail */
+.tg-fix { border-color: var(--warn); background: var(--warn-soft); }
 /* Task Manager: recurring tasks */
 .rec-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .rec-row { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--border); }
