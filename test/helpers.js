@@ -23,6 +23,7 @@ export async function setupEnv() {
   config.webTrendsRss = 'http://127.0.0.1:9/trends';
   config.webWikiApi = 'http://127.0.0.1:9/w/api.php';
   config.webAllowPrivate = false;
+  config.telegramTypingScale = 0; // split Telegram reports without real typing pauses
   loadAppSecret({ warn() {} });
   const db = await import('../src/db/index.js');
   db.openDb(config.dbPath);

@@ -7,7 +7,7 @@ import { q, now } from '../db/index.js';
 import { getSetting } from '../lib/settings.js';
 import { localDate, localTime } from '../lib/time.js';
 import { getTelegramRow, getClient } from '../telegram/settings.js';
-import { sendText } from '../telegram/notifier.js';
+import { sendText, greeting } from '../telegram/notifier.js';
 import { buildHoldingReport } from '../telegram/report.js';
 import { createBackup, pruneBackups } from '../services/backup.js';
 import { purgeExpiredSessions } from '../auth/sessions.js';
@@ -54,7 +54,7 @@ export async function runDailyReport({ force = false, at = Date.now() } = {}) {
   if (!id) return { skipped: 'already sent' };
   const { text } = buildHoldingReport(tz, at);
   try {
-    await sendText(row.chat_id, text, getClient());
+    await sendText(row.chat_id, text, getClient(), { intro: row.split_messages !== 0 ? `${greeting(tz, at)} Ini laporan harian AI Virtual Holding.` : null });
     q.run("UPDATE telegram_reports SET status = 'sent', message = ?, error = NULL, updated_at = ? WHERE id = ?", text.slice(0, 4000), now(), id);
     log.info?.(`Laporan harian ${dateStr} terkirim`);
     return { sent: true, dateStr };

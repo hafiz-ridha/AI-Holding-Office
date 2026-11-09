@@ -34,6 +34,8 @@ export const config = {
   logLevel: env.LOG_LEVEL || 'info',
   defaultTimezone: env.TZ_DEFAULT || 'Asia/Jakarta',
   telegramApiBase: (env.TELEGRAM_API_BASE || 'https://api.telegram.org').replace(/\/+$/, ''),
+  // Pause before each part of a split report ("typing…"); 0 = no pause (tests).
+  telegramTypingScale: Number(env.TELEGRAM_TYPING_SCALE ?? 1),
   // Web research for the AI (no API key): Google News RSS, Google Trends RSS, Wikipedia API, DuckDuckGo HTML search.
   // The URLs can be overridden (tests use a local stand-in); WEB_ALLOW_PRIVATE is for tests only.
   webNewsRss: env.WEB_NEWS_RSS_URL || 'https://news.google.com/rss/search',

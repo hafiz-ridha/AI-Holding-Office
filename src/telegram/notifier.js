@@ -1,7 +1,8 @@
 // Event-driven Telegram notifications with a serial send queue, alert throttling, and history in telegram_reports.
 import { q, now } from '../db/index.js';
 import { bus } from '../events.js';
-import { escapeHtml, truncate, splitMessage } from '../lib/text.js';
+import { escapeHtml, truncate, splitMessage, naturalParts } from '../lib/text.js';
+import { config } from '../config.js';
 import { getTelegramRow, getClient } from './settings.js';
 import { getEmployee } from '../agents/employees.js';
 
@@ -31,11 +32,35 @@ export function explainTelegramError(message) {
   return m;
 }
 
-// Sends (splitting long text). Throws on failure.
-export async function sendText(chatId, html, client = getClient()) {
+// Greeting that opens a scheduled/manual report, by the time of day in the holding timezone.
+export function greeting(tz = 'Asia/Jakarta', ms = Date.now()) {
+  const h = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone: tz }).format(new Date(ms)));
+  const part = h >= 4 && h < 10 ? 'pagi' : h < 15 && h >= 10 ? 'siang' : h < 18 && h >= 15 ? 'sore' : 'malam';
+  return `Selamat ${part}! 👋`;
+}
+
+const splitOn = () => {
+  const row = getTelegramRow();
+  return row ? row.split_messages !== 0 : true;
+};
+const pause = (ms) => new Promise((r) => setTimeout(r, Math.round(ms * (Number.isFinite(config.telegramTypingScale) ? config.telegramTypingScale : 1))));
+
+/**
+ * Sends a message. Long reports are sent as several natural messages (one per section) with a "typing…" indicator
+ * and a short pause before each, unless switched off in the Telegram settings; very long parts are still split at
+ * Telegram's length limit. opts.intro: an extra first message (e.g. a greeting). Throws on failure.
+ */
+export async function sendText(chatId, html, client = getClient(), { natural = splitOn(), intro = null } = {}) {
   if (!client) throw new Error('Bot token belum diatur');
   if (!chatId) throw new Error('Chat ID belum diatur. Kirim /setchat dari chat tujuan, atau isi Chat ID di dashboard → Telegram.');
-  for (const part of splitMessage(html)) {
+  const parts = natural ? naturalParts(html) : splitMessage(html);
+  if (intro) parts.unshift(intro);
+  const chatty = natural && parts.length > 1;
+  for (const [i, part] of parts.entries()) {
+    if (chatty) {
+      await client.call('sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => {});
+      await pause(Math.min(2400, 600 + part.length * 2.5));
+    } else if (i > 0) await pause(1100); // stay under Telegram per-chat limits
     try {
       await client.sendMessage(chatId, part);
     } catch (e) {
@@ -55,7 +80,6 @@ export async function sendText(chatId, html, client = getClient()) {
         throw e;
       }
     }
-    if (part !== html) await new Promise((r) => setTimeout(r, 1100));
   }
 }
 

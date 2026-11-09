@@ -61,6 +61,12 @@ Semua pengaturan ini juga tersedia lewat tombol: kirim `/mybots`, pilih bot, lal
    **Zona waktu** (default `Asia/Jakarta`), lalu **Simpan**. Klik **Kirim laporan sekarang** untuk mencoba tanpa menunggu jam laporan.
 8. Atur notifikasi sesuai kebutuhan: tugas dimulai, selesai, gagal, serta system alert dan persetujuan owner.
    **Sertakan business task & subtugas** membuat notifikasi lebih ramai, jadi biarkan mati jika cukup ringkasan.
+9. **Kirim laporan per bagian** (bawaan aktif): laporan panjang dikirim sebagai beberapa pesan pendek seperti orang
+   mengetik, dengan status "mengetik…" di antaranya.
+   - Urutannya: sapaan ("Selamat sore! 👋"), ringkasan grup, satu pesan per bisnis, Shared Services, lalu
+     rekomendasi CEO dan penggunaan AI.
+   - Berlaku untuk laporan harian, *Kirim laporan sekarang*, dan balasan `/report`, `/business`, `/finance`.
+   - Pesan pendek tetap satu pesan. Matikan opsi ini jika ingin satu pesan panjang.
 
 Menambah orang lain, misalnya partner: minta mereka mengirim `/start` ke bot, lalu tambahkan User ID mereka ke daftar
 izin, dipisah koma.

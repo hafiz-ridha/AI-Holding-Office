@@ -1,6 +1,6 @@
 import { q } from '../db/index.js';
 import { toPublic, updateTelegramSettings, getTelegramRow, getClient, lastCommandChat, chatLabel } from '../telegram/settings.js';
-import { sendText, recordMessage } from '../telegram/notifier.js';
+import { sendText, recordMessage, greeting } from '../telegram/notifier.js';
 import { buildHoldingReport, buildBusinessReport } from '../telegram/report.js';
 import { runDailyReport } from '../scheduler/index.js';
 import { findBusiness } from '../holding/businesses.js';
@@ -22,6 +22,7 @@ const fields = {
   notify_task_failed: bool,
   notify_system_alert: bool,
   notify_subtasks: bool,
+  split_messages: bool,
 };
 
 export default async function telegramRoutes(app) {
@@ -83,7 +84,7 @@ export default async function telegramRoutes(app) {
       text = buildBusinessReport(b, tz).text;
     } else text = buildHoldingReport(tz).text;
     try {
-      await sendText(row.chat_id, text, getClient());
+      await sendText(row.chat_id, text, getClient(), { intro: row.split_messages !== 0 ? `${greeting(tz)} Ini laporan terbaru yang Anda minta.` : null });
       recordMessage({ type: 'manual_report', chatId: row.chat_id, status: 'sent', message: text });
       auditReq(req, 'telegram_manual_report');
       return { ok: true };

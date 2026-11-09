@@ -61,6 +61,7 @@ export async function render(root, _params, ctx) {
       box('notify_task_started', 'Notifikasi tugas dimulai'), box('notify_task_completed', 'Notifikasi tugas selesai'),
       box('notify_task_failed', 'Notifikasi tugas gagal'), box('notify_system_alert', 'System alert & persetujuan owner'),
       box('notify_subtasks', 'Sertakan business task & subtugas (lebih ramai)'),
+      box('split_messages', 'Kirim laporan per bagian (beberapa pesan pendek dengan indikator "mengetik…", terasa lebih natural)'),
     ];
     const save = async () => {
       const body = {

@@ -26,7 +26,7 @@ Dokumentasi:
 | Isolasi data | `business_id` pada tugas, percakapan, memori, dokumen, laporan, keuangan, log; diuji otomatis terhadap kebocoran antarbisnis |
 | AI provider | 16 preset cloud gratis/kredit + 9Router + custom OpenAI-compatible; pemilihan model otomatis sesuai kebutuhan (dengan alasan di setiap jawaban), fallback, cooldown, batas request & token, model default per tingkatan |
 | Second Brain | Hasil kerja menjadi pengetahuan bersama semua karyawan dan semua model (FTS5 + sinonim), fakta yang disematkan, isolasi per bisnis, catatan yang dipakai tampil di bawah jawaban |
-| Telegram | Laporan harian holding (sekali per hari, tahan restart), notifikasi tugas/error/persetujuan, perintah `/overview /companies /business <slug> /report /tasks /finance /approvals /task /pause /resume` |
+| Telegram | Laporan harian holding (sekali per hari, tahan restart; dikirim per bagian seperti chat natural, dengan "mengetik…"), notifikasi tugas/error/persetujuan, perintah `/overview /companies /business <slug> /report /tasks /finance /approvals /task /setchat /pause /resume` |
 | Kantor virtual | Pixel art top-down orisinal: Kantor Pusat (CEO Office, Meeting Room, Business Managers, Finance, Secretary, Research, Developer, HR, Marketing, Lounge) + satu kantor per bisnis (otomatis dari database). State IDLE/THINKING/WORKING/WALKING/MEETING/COMPLETED/ERROR (+ RESTING dari riwayat tugas) mengikuti data tugas nyata; klik karakter, meja, atau ruangan untuk detail; status bar, notifikasi, siang/malam, minimap |
 | Riset web | Data terbaru dari internet (Google News, Google Trends, Wikipedia, DuckDuckGo) diberikan ke AI sebagai sumber bernomor, tanpa API key; approval owner hanya untuk tindakan penting |
 | Keamanan | Login scrypt, sesi HttpOnly, CSRF, rate limit, CSP ketat (koneksi keluar dari browser hanya ke Open-Meteo untuk cuaca otomatis), API key terenkripsi AES-256-GCM, whitelist Telegram, audit log, persetujuan owner untuk tindakan berisiko, bisa diputuskan satu per satu atau sekaligus (AI tidak pernah mengeksekusi tindakan) |
@@ -385,7 +385,7 @@ Lihat [docs/DEPLOY-AAPANEL.md](docs/DEPLOY-AAPANEL.md) bagian 8–10. Ringkasnya
 
 ```
 src/            server.js, app.js, config.js, events.js
-  db/           SQLite wrapper, migration runner, migrations/001–006 (*.sql), seed.js
+  db/           SQLite wrapper, migration runner, migrations/001–007 (*.sql), seed.js
   auth/ lib/    sesi, CSRF guard, crypto, zona waktu, settings, rate limit, audit
   providers/    adapter OpenAI-compatible, OpenRouter, 9Router, Cloudflare, Gemini + katalog preset
   router/       Model Router (pemilihan model otomatis, fallback, cooldown, kuota, concurrency)
@@ -399,5 +399,5 @@ src/            server.js, app.js, config.js, events.js
   cli/          reset-password.js
 public/         SPA tanpa build step (HTML + CSS + ES modules + Canvas); assets/office-atlas.png (sprite sheet)
 scripts/        deploy-aapanel.sh (install/update/backup di VPS aaPanel), build-office-atlas.mjs (generator sprite sheet PNG)
-test/           node:test (120 tes) + test/system (restart, beban, RAM)
+test/           node:test (124 tes) + test/system (restart, beban, RAM)
 ```

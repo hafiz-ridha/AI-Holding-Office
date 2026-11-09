@@ -114,10 +114,12 @@ test('daily report is sent once per day even if triggered repeatedly / after res
   // Simulated restart: module state is irrelevant, the DB row decides.
   const r3 = await sched.runDailyReport({ at: at + 3600_000, force: true });
   assert.equal(r3.skipped, 'already sent');
-  assert.equal(tg.sent.length - before, 1);
-  const msg = tg.sent.at(-1);
-  assert.equal(msg.chat_id, '-100123456');
-  assert.match(msg.text, /Tanggal: 07-11-2026/);
+  // One report, delivered as several natural messages (greeting first), all of them right after the first run.
+  const msgs = tg.sent.slice(before);
+  assert.ok(msgs.length >= 3, `split into ${msgs.length} messages`);
+  assert.ok(msgs.every((m) => m.chat_id === '-100123456'));
+  assert.match(msgs[0].text, /^Selamat malam! 👋 Ini laporan harian AI Virtual Holding\.$/);
+  assert.match(msgs.map((m) => m.text).join('\n'), /Tanggal: 07-11-2026[\s\S]*CEO RECOMMENDATIONS:/);
   assert.equal(q.get("SELECT COUNT(*) n FROM telegram_reports WHERE type = 'daily_report' AND report_date = '2026-11-07'").n, 1);
 });
 
@@ -232,5 +234,38 @@ test('automatic sends: "chat not found" is explained; a group upgraded to a supe
     assert.equal(q.get('SELECT chat_id FROM telegram_settings').chat_id, '-1009999');
   } finally {
     restore();
+  }
+});
+
+test('long reports are sent as several natural messages with "typing…"; short ones stay one message; can be switched off', async () => {
+  const { naturalParts } = await import('../src/lib/text.js');
+  const { buildHoldingReport } = await import('../src/telegram/report.js');
+  const report = buildHoldingReport('Asia/Jakarta').text;
+  const parts = naturalParts(report);
+  assert.ok(parts.length >= 4, `${parts.length} parts`);
+  assert.equal(parts.join('\n\n').replace(/\s+/g, ' '), report.trim().replace(/\s+/g, ' '), 'nothing lost or reordered');
+  assert.match(parts[0], /DAILY REPORT[\s\S]*GROUP OVERVIEW:/, 'header stays with the overview');
+  // One message per business; the section heading stays with the first business.
+  const biz = parts.filter((p) => /^(<b>BUSINESS REPORTS:<\/b>\n)?▸ /.test(p));
+  assert.ok(biz.length >= 2 && /^<b>BUSINESS REPORTS:<\/b>\n▸ /.test(biz[0]));
+  assert.ok(parts.every((p) => p.length <= 3900));
+  assert.deepEqual(naturalParts('Pesan pendek.\n\nBaris kedua.'), ['Pesan pendek.\n\nBaris kedua.']);
+  // Sending: typing indicator before each part, then each part as its own message.
+  const sentBefore = tg.sent.length;
+  const typingBefore = tg.actions.length;
+  await notifier.sendText(DEST, report, undefined, { intro: 'Halo!' });
+  const sent = tg.sent.slice(sentBefore);
+  assert.equal(sent.length, parts.length + 1);
+  assert.equal(sent[0].text, 'Halo!');
+  assert.equal(tg.actions.length - typingBefore, sent.length);
+  assert.ok(tg.actions.slice(typingBefore).every((a) => a.action === 'typing'));
+  // Switched off on the Telegram page: one message (only split at Telegram's 4096-character limit).
+  try {
+    assert.equal((await s.put('/api/telegram', { split_messages: false })).json().settings.split_messages, false);
+    const n = tg.sent.length;
+    await notifier.sendText(DEST, report);
+    assert.equal(tg.sent.length - n, 1);
+  } finally {
+    await s.put('/api/telegram', { split_messages: true });
   }
 });

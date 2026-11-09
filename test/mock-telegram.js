@@ -3,6 +3,7 @@ import http from 'node:http';
 
 export async function startMockTelegram({ token = '123456789:AAEhBOweik6ad9r_QXMENQjcrGbqCr4K-ra', failSend = false } = {}) {
   const sent = [];
+  const actions = []; // sendChatAction calls ("typing…")
   const updates = [];
   // unknownChats: chat ids the bot cannot reach ("chat not found"); migrate: { from, to } group -> supergroup.
   const state = { failSend, unknownChats: new Set(), migrate: null };
@@ -45,6 +46,9 @@ export async function startMockTelegram({ token = '123456789:AAEhBOweik6ad9r_QXM
         }
         sent.push(data);
         return ok({ message_id: sent.length });
+      case 'sendChatAction':
+        actions.push(data);
+        return ok(true);
       case 'getUpdates': {
         const out = updates.filter((u) => u.update_id >= (data.offset || 0));
         if (!out.length) await new Promise((r) => setTimeout(r, 100));
@@ -59,6 +63,7 @@ export async function startMockTelegram({ token = '123456789:AAEhBOweik6ad9r_QXM
     base: `http://127.0.0.1:${server.address().port}`,
     token,
     sent,
+    actions,
     updates,
     state,
     close: () => new Promise((r) => server.close(r)),

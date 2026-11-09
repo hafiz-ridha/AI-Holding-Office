@@ -49,13 +49,14 @@ export function toPublic(row = getTelegramRow()) {
     notify_task_failed: Boolean(row.notify_task_failed),
     notify_system_alert: Boolean(row.notify_system_alert),
     notify_subtasks: Boolean(row.notify_subtasks),
+    split_messages: row.split_messages === undefined ? true : Boolean(row.split_messages),
     updated_at: row.updated_at,
   };
 }
 
 const BOOL_FIELDS = [
   'report_enabled', 'polling_enabled', 'notify_task_started', 'notify_task_completed',
-  'notify_task_failed', 'notify_system_alert', 'notify_subtasks',
+  'notify_task_failed', 'notify_system_alert', 'notify_subtasks', 'split_messages',
 ];
 
 // A chat the bot must be able to reach. Common mistakes get a clear message instead of a later "chat not found".
