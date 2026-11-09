@@ -13,6 +13,7 @@ Dokumentasi:
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): arsitektur, diagram, dependency, keamanan.
 - [docs/AUDIT-HOLDING.md](docs/AUDIT-HOLDING.md): audit & strategi migrasi ke struktur holding.
 - [docs/DEPLOY-AAPANEL.md](docs/DEPLOY-AAPANEL.md): instalasi, update, backup/restore, troubleshooting di aaPanel.
+- [docs/TELEGRAM.md](docs/TELEGRAM.md): membuat bot di @BotFather dan menghubungkannya (laporan, notifikasi, perintah).
 - [docs/TESTING.md](docs/TESTING.md): hasil uji fungsional, keamanan, restart, dan RAM.
 
 ## Fitur
@@ -157,9 +158,18 @@ Karyawan tidak memanggil AI kecuali sedang mengerjakan tugas.
 
 ## Laporan Telegram
 
-1. Buat bot di @BotFather, salin token.
-2. Menu **Telegram**: isi token, Chat ID, dan User ID yang diizinkan. Kirim `/start` ke bot untuk melihat ID Anda. Atur jam laporan (zona waktu default Asia/Jakarta).
-3. Klik **Kirim pesan tes**.
+Panduan lengkap, termasuk pengaturan BotFather, grup/channel, keamanan token, dan masalah umum, ada di
+[docs/TELEGRAM.md](docs/TELEGRAM.md). Ringkasnya:
+
+1. Di Telegram buka [@BotFather](https://t.me/BotFather), kirim `/newbot`, isi nama dan username (harus diakhiri `bot`),
+   lalu salin token yang diberikan.
+2. Di dashboard buka menu **Telegram**, tempel token, lalu klik **Simpan**. Status berubah menjadi **Aktif @username_bot**.
+3. Kirim `/start` ke bot. Bot membalas User ID Anda. Isi angka itu di **User ID yang diizinkan** dan **Chat ID tujuan
+   laporan** (untuk chat pribadi angkanya sama), lalu klik **Simpan**.
+4. Klik **Kirim pesan tes**. Untuk laporan harian, centang **Laporan harian otomatis** dan atur jamnya (zona waktu default Asia/Jakarta).
+
+Menu perintah bot terisi otomatis, jadi `/setcommands` di BotFather tidak diperlukan. Panduan yang sama tersedia di
+halaman Telegram pada dashboard.
 
 Perintah yang tersedia:
 

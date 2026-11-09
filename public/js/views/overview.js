@@ -80,7 +80,7 @@ export async function render(root, _params, ctx) {
                     h('span', { class: 'small muted' }, d.date.slice(8)))))
             ),
             h('div', { class: 'card' },
-              h('div', { class: 'row-between' }, h('strong', null, 'Telegram bot'), badge(o.telegram.status === 'running' ? 'ok' : o.telegram.status === 'error' ? 'error' : 'pending', o.telegram.status === 'running' ? 'Aktif' : o.telegram.status === 'error' ? 'Error' : 'Tidak aktif')),
+              h('div', { class: 'row-between' }, h('strong', null, 'Telegram bot'), badge(o.telegram.status === 'running' ? 'ok' : o.telegram.status === 'error' ? 'error' : 'pending', o.telegram.status === 'running' ? 'Aktif' : o.telegram.status === 'error' ? 'Error' : o.telegram.status === 'starting' ? 'Menghubungkan…' : 'Tidak aktif')),
               h('p', { class: 'small muted' }, o.telegram.message || 'Atur di menu Telegram.')
             )
           )

@@ -118,6 +118,7 @@ bekerja per IP pengguna.
 2. (Opsional) **Model default per tingkatan** (Group CEO, Business Manager, Shared Services, staf bisnis).
 3. **Business Directory**: ubah tiga bisnis contoh atau tambah bisnis Anda; isi knowledge base & keuangan.
 4. **Telegram**: bot token dari @BotFather, Chat ID, User ID yang diizinkan, jam laporan → *Simpan* → *Kirim pesan tes*.
+   Langkah lengkap: [TELEGRAM.md](TELEGRAM.md).
 
 ## 7. 9Router pada VPS yang sama (opsional)
 

@@ -362,6 +362,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .timeline { font-size: 12.5px; }
 .timeline .list-item { padding: 6px 0; }
 .kbd { font-family: var(--mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--border); padding: 0 5px; border-radius: 4px; }
+/* Telegram setup guide: numbered steps, ticked when the saved settings show the step is done. */
+.setup-steps { list-style: none; margin: 14px 0 0; padding: 0; counter-reset: step; display: grid; gap: 12px; }
+.setup-steps > li { counter-increment: step; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; }
+.setup-steps > li::before { content: counter(step); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+.setup-steps > li.done::before { content: '✓'; background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.setup-steps > li.done strong { color: var(--muted); }
+.setup-steps .small { margin-top: 2px; overflow-wrap: anywhere; }
+.setup-notes { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: grid; gap: 6px; }
 
 /* office v2: status bar, pixel-art overlays, room panels */
 .office-status {

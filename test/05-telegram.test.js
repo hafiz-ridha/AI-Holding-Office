@@ -148,7 +148,9 @@ test('notifications: completed holding task and owner approval are pushed to Tel
 });
 
 test('long polling end-to-end: authorised command gets a reply, stranger is ignored', async () => {
-  await s.put('/api/telegram', { polling_enabled: true });
+  const on = await s.put('/api/telegram', { polling_enabled: true });
+  // The save response already reports the live status (no stale "stopped" until the first poll returns).
+  assert.equal(on.json().bot.status, 'running');
   tg.updates.push(
     { update_id: 10, message: { message_id: 1, text: '/companies', from: OWNER, chat: { id: 777 } } },
     { update_id: 11, message: { message_id: 2, text: '/overview', from: STRANGER, chat: { id: 888 } } }

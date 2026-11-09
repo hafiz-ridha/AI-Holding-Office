@@ -1,7 +1,49 @@
 import { get, post, put } from '../api.js';
 import { h, mount, badge, field, toast, errToast, fmtDate, emptyState } from '../ui.js';
 
+const GUIDE_URL = 'https://github.com/hafiz-ridha/AI-Holding-Office/blob/main/docs/TELEGRAM.md';
+
+export function botBadge(state, username = '') {
+  if (state.status === 'running') return badge('ok', `Aktif${username ? ` @${username}` : ''}`);
+  if (state.status === 'error') return badge('error', 'Error');
+  return badge('pending', state.status === 'starting' ? 'Menghubungkan…' : 'Tidak aktif');
+}
+
+const ext = (href, label) => h('a', { href, target: '_blank', rel: 'noopener noreferrer' }, label);
+const kbd = (t) => h('span', { class: 'kbd' }, t);
+
+// Step-by-step BotFather setup. Each step is ticked from the saved settings, so the owner sees what is left.
+function setupGuide(s, history, open, onToggle) {
+  const botLink = s.bot_username ? ext(`https://t.me/${s.bot_username}`, `@${s.bot_username} ↗`) : 'bot Anda';
+  const delivered = history.some((r) => r.status === 'sent' && r.type !== 'command');
+  const steps = [
+    [s.has_bot_token, 'Buat bot di @BotFather.', ['Buka ', ext('https://t.me/BotFather', '@BotFather ↗'), ' (akun resmi bercentang biru), kirim ', kbd('/newbot'),
+      ', isi nama tampilan, lalu username yang diakhiri ', kbd('bot'), ' (mis. holding_saya_bot). BotFather membalas token seperti ', kbd('123456789:AAH…'), '.']],
+    [s.has_bot_token, 'Tempel token, lalu Simpan.', ['Isi kolom "Bot token" di bawah. Token dicek ke Telegram dan disimpan terenkripsi, lalu status berubah menjadi Aktif. Jangan bagikan token ke siapa pun.']],
+    [s.allowed_user_ids.length > 0 && Boolean(s.chat_id), 'Kirim /start ke bot, lalu daftarkan ID Anda.', ['Buka ', botLink, ' dan tekan Start. Bot membalas "Akses ditolak. User ID Telegram Anda: …". Isi angka itu di ',
+      h('strong', null, 'User ID yang diizinkan'), ' dan ', h('strong', null, 'Chat ID tujuan laporan'), ' (untuk chat pribadi angkanya sama), lalu Simpan.']],
+    [delivered, 'Klik Kirim pesan tes.', ['Jika pesan "Tes AI Virtual Holding" masuk di Telegram, koneksi selesai. Bila gagal, lihat error di Riwayat notifikasi.']],
+    [s.report_enabled, 'Nyalakan laporan harian.', ['Centang "Laporan harian otomatis", atur jam dan zona waktu, lalu Simpan. Coba dengan "Kirim laporan sekarang".']],
+  ];
+  const done = steps.filter(([ok]) => ok).length;
+  const el = h('details', { class: 'card', open },
+    h('summary', null, h('strong', null, 'Cara menyiapkan bot (@BotFather)'),
+      h('span', { class: 'small muted' }, ` · ${done}/${steps.length} langkah selesai`)),
+    h('ol', { class: 'setup-steps' }, steps.map(([ok, title, body]) => h('li', { class: ok ? 'done' : null },
+      h('div', null, h('strong', null, title), h('div', { class: 'small muted' }, body))))),
+    h('div', { class: 'small muted setup-notes' },
+      h('div', null, h('strong', null, 'Grup: '), 'aktifkan ', kbd('/setjoingroups'), ' di BotFather, tambahkan bot ke grup, kirim ', kbd(`/start@${s.bot_username || 'username_bot'}`),
+        ', lalu pakai Chat ID grup yang dibalas bot (angka negatif, mis. -100…).'),
+      h('div', null, h('strong', null, 'Token bocor? '), 'BotFather → ', kbd('/mybots'), ' → pilih bot → API Token → Revoke, lalu tempel token baru di sini.'),
+      h('div', null, 'Menu perintah bot terisi otomatis, jadi ', kbd('/setcommands'), ' tidak perlu. Satu token hanya untuk satu server. ', ext(GUIDE_URL, 'Panduan lengkap ↗'))));
+  el.addEventListener('toggle', () => onToggle(el.open));
+  return el;
+}
+
 export async function render(root, _params, ctx) {
+  // Keeps the guide as it is (open or closed) while the page re-renders after each save; a fresh visit opens it
+  // only until the essential steps are done.
+  let guideOpen = null;
   const draw = async () => {
     const [d, history] = await Promise.all([get('/api/telegram'), get('/api/telegram/history')]);
     const s = d.settings;
@@ -41,13 +83,15 @@ export async function render(root, _params, ctx) {
         ev.target.disabled = false;
       }
     } }, label);
+    const essentials = s.has_bot_token && s.allowed_user_ids.length > 0 && Boolean(s.chat_id);
     mount(root, h('div', { class: 'stack' },
+      setupGuide(s, history, guideOpen ?? !essentials, (v) => { guideOpen = v; }),
       h('div', { class: 'grid grid-2' },
         h('div', { class: 'card stack' },
-          h('div', { class: 'row-between' }, h('h2', null, 'Konfigurasi bot'), badge(d.bot.status === 'running' ? 'ok' : d.bot.status === 'error' ? 'error' : 'pending', d.bot.status === 'running' ? `Aktif${s.bot_username ? ` @${s.bot_username}` : ''}` : d.bot.status === 'error' ? 'Error' : 'Tidak aktif')),
+          h('div', { class: 'row-between' }, h('h2', null, 'Konfigurasi bot'), botBadge(d.bot, s.bot_username)),
           d.bot.message ? h('p', { class: 'small muted', style: { margin: 0 } }, d.bot.message) : null,
           field('Bot token (dari @BotFather)', token, 'Divalidasi ke Telegram lalu disimpan terenkripsi.'),
-          field('Chat ID tujuan laporan', chat, 'Kirim /start ke bot untuk melihat Chat ID.'),
+          field('Chat ID tujuan laporan', chat, 'Chat pribadi: sama dengan User ID Anda. Grup: angka negatif yang dibalas bot setelah /start@username_bot.'),
           field('User ID yang diizinkan memberi perintah', users, 'Perintah dari user lain diabaikan. /start menampilkan User ID pengirim.'),
           h('div', { class: 'form-grid' }, field('Jam laporan harian', time), field('Zona waktu', tz)),
           h('div', { class: 'stack-sm' }, flags.map((f) => f.el)),

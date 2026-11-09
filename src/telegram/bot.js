@@ -204,7 +204,10 @@ class Bot {
     }
     this.running = true;
     this.ctrl = new AbortController();
-    this.loop(client, this.ctrl.signal);
+    this.state = { status: 'starting', message: 'Menghubungkan ke Telegram…' };
+    // Wait for the first contact (deleteWebhook + setMyCommands, each bounded by the client timeout) so the dashboard
+    // shows the real status right after the token is saved instead of a stale "stopped" until the first poll returns.
+    await new Promise((ready) => this.loop(client, this.ctrl.signal, ready));
   }
 
   async stop() {
@@ -215,15 +218,18 @@ class Bot {
     this.loopPromise = null;
   }
 
-  loop(client, signal) {
+  loop(client, signal, ready = () => {}) {
     this.loopPromise = (async () => {
       let backoff = 2000;
       try {
         await client.deleteWebhook(); // polling and webhooks are mutually exclusive in the Bot API
         await client.setMyCommands(COMMANDS.map(([command, description]) => ({ command, description })));
+        if (!signal.aborted) this.state = { status: 'running', message: 'Long polling aktif' };
       } catch (e) {
+        if (!signal.aborted) this.state = { status: 'error', message: e.message };
         this.log.warn?.(`Telegram init: ${e.message}`);
       }
+      ready();
       while (this.running && !signal.aborted) {
         try {
           const offset = (getTelegramRow()?.last_update_id || 0) + 1;
