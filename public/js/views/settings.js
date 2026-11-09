@@ -5,6 +5,7 @@ const GROUPS = [
   ['Antrean & concurrency', ['max_concurrency', 'queue_paused', 'max_task_attempts', 'retry_delay_minutes']],
   ['Batas AI', ['max_daily_requests', 'max_tokens_per_task', 'max_output_tokens', 'max_model_attempts', 'memory_items']],
   ['Second Brain', ['knowledge_enabled', 'knowledge_items']],
+  ['Riset web & persetujuan', ['web_research_enabled', 'web_research_pages', 'approval_important_only']],
   ['Orkestrasi holding', ['group_ceo_cross_business', 'max_business_tasks', 'max_shared_tasks', 'bm_max_subtasks', 'max_subtasks']],
   ['Waktu & backup', ['timezone', 'backup_enabled', 'backup_time', 'backup_retention', 'log_retention_days']],
   ['Keamanan', ['session_ttl_hours']],

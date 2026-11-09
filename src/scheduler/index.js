@@ -2,6 +2,7 @@
 //  - daily Telegram report: claimed via a unique row per date -> never sent twice
 //  - daily database backup + pruning
 //  - daily cleanup of expired sessions and old logs
+//  - recurring tasks (each due run creates exactly one task, see holding/recurring.js)
 import { q, now } from '../db/index.js';
 import { getSetting } from '../lib/settings.js';
 import { localDate, localTime } from '../lib/time.js';
@@ -11,6 +12,7 @@ import { buildHoldingReport } from '../telegram/report.js';
 import { createBackup, pruneBackups } from '../services/backup.js';
 import { purgeExpiredSessions } from '../auth/sessions.js';
 import { bus } from '../events.js';
+import { runDueRecurring } from '../holding/recurring.js';
 
 const MAX_REPORT_ATTEMPTS = 3;
 const RETRY_AFTER_MS = 5 * 60_000;
@@ -107,6 +109,7 @@ async function tick() {
   busy = true;
   try {
     await runDailyReport();
+    runDueRecurring();
     runBackupIfDue();
     runCleanup();
   } catch (e) {

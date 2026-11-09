@@ -4,7 +4,7 @@ import { listEmployees, tierOf } from '../agents/employees.js';
 import { computeOfficeState } from '../holding/officeState.js';
 import { listBusinesses } from '../holding/businesses.js';
 import { listReports, getReport } from '../holding/reports.js';
-import { listApprovals, decideApproval } from '../holding/approvals.js';
+import { listApprovals, decideApproval, decideApprovals } from '../holding/approvals.js';
 import { summary as financeSummary, monthRange } from '../holding/finance.js';
 import { listProviders } from '../providers/service.js';
 import { worker } from '../queue/worker.js';
@@ -186,8 +186,34 @@ export default async function holdingRoutes(app) {
   });
 
   app.get('/api/approvals', {
-    schema: { querystring: { type: 'object', properties: { status: { type: 'string', enum: ['pending', 'approved', 'rejected'] } } } },
-  }, async (req) => listApprovals({ status: req.query.status || null }));
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['pending', 'approved', 'rejected'] },
+          business: { type: 'string', pattern: '^(hq|\\d+)$' }, // 'hq' = holding level, or a business id
+        },
+      },
+    },
+  }, async (req) => {
+    const b = req.query.business;
+    return listApprovals({ status: req.query.status || null, businessId: b === undefined ? undefined : b === 'hq' ? null : Number(b) });
+  });
+
+  // Bulk decision for many approvals at once (same decision and note). Each decided item gets its own audit entry.
+  app.post('/api/approvals/decide', {
+    schema: {
+      body: body({
+        ids: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'integer', minimum: 1 } },
+        decision: { type: 'string', enum: ['approved', 'rejected'] },
+        note: str(500),
+      }, ['ids', 'decision']),
+    },
+  }, async (req) => {
+    const r = decideApprovals(req.body.ids, req.body.decision, req.user.username, req.body.note);
+    for (const a of r.decided) auditReq(req, `approval_${req.body.decision}`, `approval:${a.id}`, { bulk: r.decided.length }, a.business_id);
+    return r;
+  });
 
   app.post('/api/approvals/:id/decide', {
     schema: { params: idParam, body: body({ decision: { type: 'string', enum: ['approved', 'rejected'] }, note: str(500) }, ['decision']) },

@@ -18,6 +18,7 @@ export default async function taskRoutes(app) {
             employee_id: { type: 'integer' },
             business_id: { type: 'string', pattern: '^(\\d+|holding|)$' },
             kind: { type: 'string', enum: [...KINDS, 'top', ''] },
+            recurring_id: { type: 'integer', minimum: 1 },
             q: str(100),
             page: { type: 'integer', minimum: 1, default: 1 },
             limit: { type: 'integer', minimum: 1, maximum: 100, default: 30 },
@@ -26,7 +27,7 @@ export default async function taskRoutes(app) {
       },
     },
     async (req) => {
-      const { status, employee_id, business_id, kind, q: search, page, limit } = req.query;
+      const { status, employee_id, business_id, kind, q: search, page, limit, recurring_id } = req.query;
       const where = [];
       const vals = [];
       if (status === 'active') where.push("t.status IN ('pending','assigned','processing')");
@@ -42,6 +43,10 @@ export default async function taskRoutes(app) {
       else if (business_id) {
         where.push('t.business_id = ?');
         vals.push(Number(business_id));
+      }
+      if (recurring_id) {
+        where.push('t.recurring_id = ?');
+        vals.push(recurring_id);
       }
       if (kind === 'top') where.push('t.parent_id IS NULL');
       else if (kind) {

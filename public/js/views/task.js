@@ -62,8 +62,21 @@ export async function render(root, [id], ctx) {
         h('div', { class: 'card' }, h('div', { class: 'card-head' }, h('h3', null, 'Output'), t.result ? h('button', { class: 'btn btn-sm', type: 'button', onclick: () => navigator.clipboard?.writeText(t.result).then(() => toast('Disalin', 'ok')) }, 'Salin') : null),
           t.result ? h('div', { class: 'result-box' }, md(t.result)) : h('p', { class: 'muted' }, active ? 'Sedang dikerjakan…' : 'Belum ada hasil.'),
           t.result ? modelNote(taskModelInfo(t), { open: true }) : null),
+        // Sources from the automatic web research that the AI was given (cited as [W1], [W2], ...).
+        t.web_refs?.length
+          ? h('details', { class: 'card', open: true }, h('summary', null, h('strong', null, `Sumber web (${t.web_refs.length})`), h('span', { class: 'small muted' }, ' · diambil otomatis sebelum AI bekerja, dikutip sebagai [W1], [W2], …')),
+              h('ol', { class: 'web-refs small' }, t.web_refs.map((r) => h('li', { value: r.n },
+                h('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer' }, r.title || r.url),
+                h('span', { class: 'muted' }, [r.source, r.date ? fmtDate(Date.parse(r.date)) : ''].filter((x) => x && x !== '-').map((x) => ` · ${x}`).join(''))))))
+          : null,
         d.approvals.length
           ? h('div', { class: 'card' }, h('h3', null, 'Persetujuan owner'), d.approvals.map((a) => h('div', { class: 'list-item' }, h('div', { class: 'grow' }, a.detail), badge(a.status))), h('a', { href: '#/approvals', class: 'small' }, 'Kelola di Approvals →'))
+          : null,
+        // Flags the AI raised that are only information / data requests: no owner approval needed (kept for reference).
+        d.logs.some((l) => l.event === 'approval_skipped')
+          ? h('div', { class: 'card' }, h('h3', null, 'Catatan AI (tidak perlu persetujuan)'),
+              h('ul', { class: 'small', style: { margin: 0, paddingLeft: '18px' } }, d.logs.filter((l) => l.event === 'approval_skipped').map((l) => h('li', null, l.message))),
+              h('p', { class: 'small muted', style: { margin: '6px 0 0' } }, 'Hanya tindakan penting (uang, kontrak, SDM, harga, publikasi, hukum, data rahasia) yang menunggu persetujuan owner. Atur di Settings.'))
           : null,
         h('div', { class: 'grid grid-2' },
           h('div', { class: 'card' }, h('h3', null, 'Riwayat'),

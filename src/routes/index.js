@@ -9,7 +9,8 @@ import telegram from './telegram.js';
 import settings from './settings.js';
 import chat from './chat.js';
 import knowledge from './knowledge.js';
+import recurring from './recurring.js';
 
 export async function registerRoutes(app) {
-  for (const r of [health, auth, holding, businesses, tasks, employees, providers, telegram, settings, chat, knowledge]) await app.register(r);
+  for (const r of [health, auth, holding, businesses, tasks, employees, providers, telegram, settings, chat, knowledge, recurring]) await app.register(r);
 }

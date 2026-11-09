@@ -7,9 +7,23 @@ const HALL_W = 2; // vertical hallway on the left connects all corridors
 // Front yard above the building (tiles): sky 3, road 2, sidewalk 1, parking lot 4. Shows time of day and weather.
 export const YARD_H = 10;
 
-const ROLE_ROOM = { group_finance: 'finance', finance: 'finance', secretary: 'reception', researcher: 'research', developer: 'dev', hr: 'hr', marketing: 'marketing' };
 const ROLE_DESK = { marketing: 'desk_mkt', finance: 'desk_fin', group_finance: 'desk_fin', secretary: 'desk_rec', researcher: 'desk_res', developer: 'desk_dev', hr: 'desk_hr', business_manager: 'desk_bm' };
-const ROOM_DESK = { bm: 'desk_bm', finance: 'desk_fin', reception: 'desk_rec', research: 'desk_res', dev: 'desk_dev', hr: 'desk_hr', marketing: 'desk_mkt' };
+// Startup HQ: the central team sits together in one Open Space, grouped by function (finance, secretary, research,
+// developers, HR, marketing, then custom roles). Each desk keeps its role-specific items.
+const ROLE_ORDER = ['group_finance', 'finance', 'secretary', 'researcher', 'developer', 'hr', 'marketing'];
+const roleRank = (e) => {
+  const i = ROLE_ORDER.indexOf(e.role_key);
+  return i === -1 ? ROLE_ORDER.length : i;
+};
+
+// Office boys: decorative NPCs (not AI employees, no data). Same uniform, different faces.
+const OB_UNIFORM = { shirt: '#7cc0e8', pants: '#2f3b52', accent: '#1f4e79' };
+export const OFFICE_BOYS = [
+  { id: 'ob-1', name: 'Ujang', avatar: { ...OB_UNIFORM, skin: '#e0ac69', hair: '#2b1a10', hairStyle: 'cap' } },
+  { id: 'ob-2', name: 'Dedi', avatar: { ...OB_UNIFORM, skin: '#c68642', hair: '#1b1b1b', hairStyle: 'short' } },
+  { id: 'ob-3', name: 'Bayu', avatar: { ...OB_UNIFORM, skin: '#f1c27d', hair: '#3b2416', hairStyle: 'messy' } },
+  { id: 'ob-4', name: 'Asep', avatar: { ...OB_UNIFORM, skin: '#d9a066', hair: '#24160d', hairStyle: 'cap' } },
+];
 
 // ---------- generic layout ----------
 // Landscape map: every band is stretched to mapW and the extra width is shared by all rooms of the band in proportion
@@ -219,7 +233,7 @@ function placeDesks(room, ids, opts = {}) {
     const row = Math.floor(i / room.cols);
     const x = x0 + col * step;
     const y = (room.y + 4 + row * 4) * T;
-    out.push(makeDesk(x, y, room, { ...opts, owner: id, flag: opts.flagOf?.(id) || null, frame: opts.frameOf?.(id) || opts.frame }));
+    out.push(makeDesk(x, y, room, { ...opts, owner: id, flag: opts.flagOf?.(id) || null, frame: opts.frameOf?.(id) || opts.frame, dual: opts.dual || opts.dualOf?.(id) }));
   });
   return out;
 }
@@ -248,7 +262,7 @@ function makeMeeting(room, scope) {
 const PAD = 2;
 const overlap = (a, b, p = PAD) => a.x < b.x + b.w + p && a.x + a.w + p > b.x && a.y < b.y + b.h + p && a.y + a.h + p > b.y;
 const RUG_COLORS = ['red', 'blue', 'green'];
-const AMBIENT_PLANTS = new Set(['plant_small', 'plant_big']);
+const AMBIENT_PLANTS = new Set(['plant_small', 'plant_big', 'palm']);
 
 // What each room contains. wall = hung on the wallpaper, back = against the wall, floor = free-standing.
 const FURNITURE = {
@@ -266,16 +280,35 @@ const FURNITURE = {
   manager: { wall: ['kpi_board', 'certificate'], back: [['bookshelf', 'right'], ['trophy_cabinet', 'right']], floor: [['plant_big', 'right']], rug: 'biz' },
   workspace: { wall: ['perf_board', 'kanban_board', 'clock_face'], back: [['printer', 'right'], ['cabinet', 'right'], ['water_cooler', 'right']], floor: [['plant_big', 'right'], ['plant_small', 'left']] },
   guests: { wall: ['painting', 'clock_face'], back: [['water_cooler', 'right']], floor: [['plant_small', 'right']] },
+  // v5 startup HQ
+  open: {
+    wall: ['neon_sign', 'kanban_board', 'analytics_screen', 'moodboard', 'clock_face'],
+    back: [['phone_booth', 'right'], ['bike_rack', 'right'], ['water_cooler', 'left'], ['printer', 'left']],
+    floor: [['plant_big', 'right'], ['plant_big', 'left'], ['plant_small', 'left']],
+  },
+  // Lounge: sofa cluster in the middle, coffee corner on the left, game corner on the right.
+  startup_lounge: {
+    wall: ['coffee_menu', 'tv', 'dartboard', 'clock_face', 'painting'],
+    back: [], floor: [['plant_big', 'left'], ['plant_small', 'right']], rug: 'blue', lounge: true, startup: true,
+  },
+  pool: {
+    wall: ['lifebuoy', 'clock_face', 'lifebuoy'],
+    back: [['palm', 'left'], ['towel_rack', 'left'], ['palm', 'right'], ['pool_shower', 'right']], floor: [], pool: true,
+  },
 };
-const WALL_STYLE = { ceo: 'wood', meeting: 'sky', bm: 'cream', finance: 'sage', reception: 'peach', research: 'wood', dev: 'slate', hr: 'rose', marketing: 'lav', shared: 'cream', lounge: 'sage', manager: 'wood', workspace: 'cream', guests: 'peach' };
+const WALL_STYLE = {
+  ceo: 'wood', meeting: 'glass', bm: 'concrete', finance: 'sage', reception: 'peach', research: 'wood', dev: 'slate', hr: 'rose', marketing: 'lav', shared: 'cream',
+  lounge: 'sage', manager: 'wood', workspace: 'brick', guests: 'peach', open: 'brick', pool: 'pooltile',
+};
 
 function furnish(scene, room, size, rugIndex) {
-  const spec = FURNITURE[room.key] || { wall: [], back: [], floor: [] };
+  const spec = FURNITURE[room.spec || room.key] || { wall: [], back: [], floor: [] };
   const X = room.x * T;
   const Y = room.y * T;
   const W = room.w * T;
   const H = room.h * T;
-  const out = { wallDeco: [], props: [], rugs: [], ambient: [], restSeats: [], extras: [] };
+  // spots: where the office boys work (coffee machine, their cart, pool edge); snapped to free cells by the engine.
+  const out = { wallDeco: [], props: [], rugs: [], ambient: [], restSeats: [], extras: [], spots: {}, pool: null };
   // ---- obstacles: desks, idle spots, meeting area, door path ----
   const occ = [];
   for (const d of [...scene.desks, ...scene.visitorDesks].filter((d) => d.room === room)) {
@@ -309,9 +342,10 @@ function furnish(scene, room, size, rugIndex) {
     return list;
   };
   const place = (f, r) => {
-    if (AMBIENT_PLANTS.has(f)) out.ambient.push({ type: 'plant', f, x: r.x, y: r.y, z: r.y + r.h });
+    if (AMBIENT_PLANTS.has(f)) out.ambient.push({ type: 'plant', f, x: r.x, y: r.y, w: r.w, h: r.h, z: r.y + r.h });
     else out.props.push({ f, x: r.x, y: r.y, w: r.w, h: r.h });
   };
+  const backY = (f) => Y + 4 * T - 2 - size(f).h; // standing against the wall
 
   // ---- sign plank on the wall + wall decorations ----
   const signW = Math.min(W - 12, Math.round(room.name.length * 5.4) + 22);
@@ -333,6 +367,31 @@ function furnish(scene, room, size, rugIndex) {
     }
   }
   out.wallOcc = wallOcc;
+
+  // ---- swimming pool: water basin in the middle, loungers + parasols on the deck below it ----
+  if (spec.pool) {
+    // Layout (top to bottom): wall strip with palms/towels, deck path, water, a free walkway around the pool,
+    // loungers + parasols along the bottom wall (left and right of the door). Every deck area stays reachable.
+    const pw = Math.max(6 * T, Math.min(W - 8 * T, 24 * T));
+    const ph = Math.max(3 * T, Math.min(4 * T, H - 8 * T));
+    const pool = { x: X + Math.round((W - pw) / 2), y: Y + 4 * T + 6, w: pw, h: ph };
+    out.pool = pool;
+    occ.push({ x: pool.x - 4, y: pool.y - 4, w: pool.w + 8, h: pool.h + 8 });
+    out.extras.push({ f: 'pool_ladder', x: pool.x + pool.w - 26, y: pool.y - 3 });
+    out.ambient.push({ type: 'pool', x: pool.x, y: pool.y, w: pool.w, h: pool.h });
+    out.ambient.push({ type: 'float', x: pool.x + Math.round(pool.w * 0.28), y: pool.y + Math.round(pool.h * 0.4), w: 12, h: 12 });
+    // Free walkway below the water so the side decks connect to the door.
+    occ.push({ x: X + 4, y: pool.y + pool.h + 4, w: W - 8, h: 16 });
+    const row = (f, fromRight) => {
+      const s = size(f);
+      const y = Y + H - 6 - s.h;
+      const r = tryAt(f, xs(s.w, fromRight ? 'right' : 'left').map((x) => [x, y]));
+      if (r) out.props.push({ f, ...r });
+    };
+    for (const side of [false, true]) for (const f of ['lounger', 'parasol', 'lounger']) row(f, side);
+    // The office boy skims the pool from the side decks.
+    out.spots.pool = [{ x: pool.x - 12, y: pool.y + Math.round(pool.h / 2) }, { x: pool.x + pool.w + 12, y: pool.y + Math.round(pool.h / 2) }];
+  }
 
   // ---- lounge: seating cluster with real seats for RESTING employees ----
   if (spec.lounge) {
@@ -370,6 +429,43 @@ function furnish(scene, room, size, rugIndex) {
     }
   }
 
+  // ---- startup lounge: coffee corner on the left, game corner on the right ----
+  if (spec.startup) {
+    const bar = tryAt('coffee_bar', xs(size('coffee_bar').w, 'left').map((x) => [x, backY('coffee_bar')]));
+    if (bar) {
+      out.props.push({ f: 'coffee_bar', ...bar });
+      out.ambient.push({ type: 'steam', x: bar.x + 10, y: bar.y });
+      for (let i = 0; i < 3; i++) {
+        const st = tryAt('bar_stool', [[bar.x + 8 + i * 16, bar.y + bar.h + 3]]);
+        if (st) out.props.push({ f: 'bar_stool', ...st });
+      }
+      const fridge = tryAt('drink_fridge', [[bar.x + bar.w + 4, backY('drink_fridge')]]);
+      if (fridge) out.props.push({ f: 'drink_fridge', ...fridge });
+      const cart = tryAt('ob_cart', xs(size('ob_cart').w, 'left').filter((x) => x >= (fridge || bar).x + (fridge || bar).w + 4).map((x) => [x, backY('ob_cart')]));
+      if (cart) {
+        out.props.push({ f: 'ob_cart', ...cart });
+        out.spots.station = { x: cart.x + Math.round(cart.w / 2), y: cart.y + cart.h + 8 };
+      }
+      out.spots.coffee = { x: bar.x + bar.w - 6, y: bar.y + bar.h + 8 };
+    }
+    for (let i = 0; i < 2; i++) {
+      const r = tryAt('arcade', xs(size('arcade').w, 'right').map((x) => [x, backY('arcade')]));
+      if (r) {
+        out.props.push({ f: 'arcade', ...r });
+        out.ambient.push({ type: 'arcade', x: r.x, y: r.y });
+      }
+    }
+    // Game tables keep 18 px of free floor on both short sides: that is where the two players stand.
+    for (const f of ['pingpong', 'foosball']) {
+      const s = size(f);
+      const M = 18;
+      const cands = [];
+      for (const y of ys(s.h)) for (const x of xs(s.w + 2 * M, 'right')) cands.push([x, y]);
+      const r = tryAt(f, cands, { top: Y + 4 * T + 4, size: { w: s.w + 2 * M, h: s.h } });
+      if (r) out.props.push({ f, x: r.x + M, y: r.y, w: s.w, h: s.h });
+    }
+  }
+
   // ---- against the wall ----
   for (const [f, side] of spec.back) {
     const s = size(f);
@@ -380,8 +476,13 @@ function furnish(scene, room, size, rugIndex) {
     for (const x of xs(s.w, side)) cands.push([x, bottomY]);
     if (s.h <= 22) for (const x of xs(s.w, side)) cands.push([x, topY]);
     const r = tryAt(f, cands);
-    if (r) place(f, r);
+    if (r) {
+      place(f, r);
+      // Small offices: the office boy makes coffee at the coffee machine of the pantry.
+      if (f === 'coffee_machine' && !out.spots.coffee) out.spots.coffee = { x: r.x + Math.round(r.w / 2), y: r.y + r.h + 8 };
+    }
   }
+  if (out.spots.coffee && !out.spots.station) out.spots.station = { x: out.spots.coffee.x + 18, y: out.spots.coffee.y + 6 };
 
   // ---- free-standing ----
   for (const [f, side] of spec.floor) {
@@ -443,9 +544,11 @@ function finishScene(base, extra, size) {
   const ambient = [];
   const extras = [];
   const restSeats = [];
+  const spots = { coffee: null, station: null, pool: [] };
+  scene.pool = null;
   scene.rooms.forEach((r, i) => {
     r.door = door(r);
-    r.wall = WALL_STYLE[r.key] || 'cream';
+    r.wall = r.wallStyle || WALL_STYLE[r.key] || 'cream';
   });
   scene.rooms.forEach((r, i) => {
     const f = furnish(scene, r, size, i + (scene.business?.id || 0));
@@ -456,7 +559,13 @@ function finishScene(base, extra, size) {
     ambient.push(...f.ambient);
     extras.push(...f.extras);
     restSeats.push(...f.restSeats.map((s) => ({ ...s, room: r })));
+    for (const k of ['coffee', 'station']) if (f.spots[k] && !spots[k]) spots[k] = { ...f.spots[k], room: r };
+    for (const p of f.spots.pool || []) spots.pool.push({ ...p, room: r });
+    if (f.pool) scene.pool = { ...f.pool, room: r };
   });
+  // Office boys (decoration): HQ has three, every business office one. They start at their cart / the pantry.
+  scene.spots = spots;
+  scene.npcs = (scene.business ? [OFFICE_BOYS[3]] : OFFICE_BOYS.slice(0, 3)).map((n) => ({ ...n }));
   // Server racks blink (ambient) — they are static furniture plus a dynamic LED overlay.
   for (const p of props) if (p.f === 'server_rack') ambient.push({ type: 'rack', x: p.x, y: p.y });
   scene.yard = buildYard(scene.mapW, size, { title: scene.business?.name || 'AI Virtual Holding', motorCols: scene.business ? 7 : 10 });
@@ -472,6 +581,7 @@ export function findCollisions(scene) {
     ...scene.props.map((p) => ({ name: p.f, r: p })),
     ...scene.ambient.filter((a) => a.type === 'plant').map((a) => ({ name: a.f, r: { x: a.x, y: a.y, w: a.w ?? (a.f === 'plant_big' ? 16 : 12), h: a.h ?? (a.f === 'plant_big' ? 28 : 14) } })),
     ...(scene.yard ? [...scene.yard.objects.map((o) => ({ name: `yard:${o.f}`, r: o })), { name: 'yard:sign', r: scene.yard.sign }] : []),
+    ...(scene.pool ? [{ name: 'pool', r: scene.pool }] : []),
     ...[...scene.desks, ...scene.visitorDesks].map((d) => ({ name: `desk:${d.owner ?? '-'}`, r: { x: d.x - 1, y: d.y - 6, w: d.w + 2, h: 40 } })),
   ];
   const out = [];
@@ -489,15 +599,8 @@ export function buildHQScene(data, size, opts = {}) {
   const emps = data.employees.filter(active);
   const ceo = emps.find((e) => e.is_manager);
   const managers = emps.filter((e) => !e.is_manager && (e.role_key === 'business_manager' || e.manages_business_id));
-  const shared = emps.filter((e) => e.org_unit === 'shared' && !e.is_manager);
-  const byRoom = { finance: [], reception: [], research: [], dev: [], hr: [], marketing: [], shared: [] };
-  for (const e of shared) byRoom[ROLE_ROOM[e.role_key] || 'shared'].push(e.id);
-  // Marketing hub: shared marketers, or (if none) the business marketers shown as a mirror of their business desks.
-  let marketingMirror = false;
-  if (!byRoom.marketing.length) {
-    byRoom.marketing = emps.filter((e) => e.org_unit === 'business' && e.role_key === 'marketing').map((e) => e.id);
-    marketingMirror = byRoom.marketing.length > 0;
-  }
+  // Central team (shared services + any other non-business role): one Open Space, grouped by function.
+  const team = emps.filter((e) => e.org_unit !== 'business' && !e.is_manager && !managers.includes(e)).sort((a, b) => roleRank(a) - roleRank(b) || a.id - b.id);
   const bizColor = new Map(data.businesses.map((b) => [b.id, b.color]));
   const empById = new Map(data.employees.map((e) => [e.id, e]));
   const flagOf = (id) => {
@@ -506,36 +609,34 @@ export function buildHQScene(data, size, opts = {}) {
     return bid ? bizColor.get(bid) : null;
   };
 
+  // Startup HQ: no department rooms. Glass meeting room, an Open Space for the whole central team, a lounge with a
+  // coffee corner and a game corner, and a swimming pool.
   const R = (key, name, w, extra) => ({ key, name, w, floor: 'wood', tint: null, kind: 'desks', cols: 2, deskCount: 0, ...extra });
   const makeBands = () => [
     [
       R('ceo', 'CEO Office', 11, { floor: 'parquet', tint: '#8a6fb0', cols: 1, deskCount: ceo ? 1 : 0, exec: true }),
       R('meeting', 'Meeting Room', 15, { floor: 'tile', kind: 'meeting', minH: 11, tint: '#4f6d8a' }),
-      R('bm', 'Business Managers', 18, { tint: '#5b7fbf', cols: 3, deskCount: managers.length }),
+      R('bm', 'Business Managers', 18, { floor: 'concrete', tint: '#5b7fbf', cols: 3, deskCount: managers.length }),
     ],
     [
-      R('finance', 'Group Finance', 9, { floor: 'carpet', tint: '#5f9e54', deskCount: byRoom.finance.length }),
-      R('reception', 'Secretary & Reception', 9, { floor: 'warm', tint: '#c98b5a', deskCount: byRoom.reception.length }),
-      R('research', 'Research Library', 9, { floor: 'woodb', tint: '#8a5a37', deskCount: byRoom.research.length }),
-      R('dev', 'Developer Lab', 9, { floor: 'dark', tint: '#3d434e', deskCount: byRoom.dev.length }),
-      R('hr', 'HR', 8, { floor: 'carpet', tint: '#d65a4a', deskCount: byRoom.hr.length }),
+      R('open', 'Open Space', 44, { floor: 'concrete', tint: '#2fa6a0', cols: 8, maxCols: 8, deskCount: team.length }),
     ],
     [
-      R('marketing', marketingMirror ? 'Marketing Hub (tim bisnis)' : 'Marketing Hub', 15, { floor: 'carpet', tint: '#e07a2f', cols: 3, deskCount: byRoom.marketing.length }),
-      R('shared', 'Shared Services', 13, { tint: '#64748b', cols: 3, deskCount: byRoom.shared.length }),
-      R('lounge', 'Lounge', 16, { floor: 'parquet', kind: 'lounge', minH: 10, tint: '#5f9e54' }),
+      R('lounge', 'Lounge · Coffee & Game Corner', 26, { floor: 'terrazzo', kind: 'lounge', minH: 11, tint: '#e07a2f', spec: 'startup_lounge', wallStyle: 'concrete' }),
+      R('pool', 'Kolam Renang', 18, { floor: 'deck', kind: 'pool', minH: 11, tint: '#45aed6' }),
     ],
   ];
   const base = layoutFor(makeBands, { aspect: opts.aspect, minW: 46, defaultW: 64 });
   const room = (k) => base.rooms.find((r) => r.key === k);
-  const frameOf = (id) => ROLE_DESK[empById.get(id)?.role_key];
+  const roleOf = (id) => empById.get(id)?.role_key;
   const desks = [];
   if (ceo) desks.push(...placeDesks(room('ceo'), [ceo.id], { exec: true }));
   desks.push(...placeDesks(room('bm'), managers.map((e) => e.id), { flagOf, frame: 'desk_bm' }));
-  for (const k of ['finance', 'reception', 'research', 'hr', 'marketing', 'shared']) {
-    desks.push(...placeDesks(room(k), byRoom[k], { flagOf: k === 'marketing' ? flagOf : null, frame: ROOM_DESK[k], frameOf: k === 'shared' ? frameOf : null }));
-  }
-  desks.push(...placeDesks(room('dev'), byRoom.dev, { dual: true, frame: 'desk_dev' }));
+  desks.push(...placeDesks(room('open'), team.map((e) => e.id), {
+    frameOf: (id) => ROLE_DESK[roleOf(id)],
+    dualOf: (id) => roleOf(id) === 'developer',
+    flagOf: (id) => (roleOf(id) === 'marketing' ? flagOf(id) : null),
+  }));
   const meeting = makeMeeting(room('meeting'), { scope: 'hq', business_id: null });
   return finishScene(base, {
     id: 'hq',
@@ -564,7 +665,7 @@ export function buildBusinessScene(data, business, size, opts = {}) {
     ],
     [
       { key: 'meeting', name: 'Ruang Rapat Bisnis', w: 14, kind: 'meeting', minH: 11, floor: 'tile', tint: '#4f6d8a' },
-      { key: 'guests', name: 'Meja Tamu · Shared Services', w: 12, kind: 'desks', cols: 2, deskCount: 3, floor: 'warm', tint: '#64748b' },
+      { key: 'guests', name: 'Hot Desk Tamu', w: 12, kind: 'desks', cols: 2, deskCount: 3, floor: 'warm', tint: '#64748b' },
       { key: 'lounge', name: 'Pantry', w: 12, kind: 'lounge', minH: 10, floor: 'parquet', tint: '#5f9e54' },
     ],
   ];

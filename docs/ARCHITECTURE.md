@@ -282,3 +282,40 @@ statusnya `unsupported`. Tidak ada integrasi tiruan.
   `APP_SECRET`; dashboard hanya menerima versi tersamar (`sk-or-…a1b2`).
 - Telegram: hanya User ID dalam whitelist yang dapat menjalankan perintah.
 - Audit log: login, perubahan provider, karyawan, Telegram, settings, backup.
+
+### Tugas berulang
+
+`src/holding/recurring.js`, rute `src/routes/recurring.js`, migrasi `006_recurring.sql` (tabel `recurring_tasks`,
+kolom `tasks.recurring_id`). Aturan jadwal: `daily`, `weekdays`, `weekly` (hari ISO 1–7), `monthly` (tanggal 1–28),
+atau `hours` (tiap N jam mulai `time_of_day`), dihitung di zona waktu holding (`nextRunAt`). Scheduler 30 detik
+memanggil `runDueRecurring()`:
+
+- Jadwal diklaim dengan `UPDATE … SET next_run_at = <berikutnya> WHERE next_run_at = <lama>`, jadi satu jadwal yang
+  jatuh tempo membuat tepat satu tugas, juga jika ada dua detak atau setelah restart. Jadwal yang terlewat saat server
+  mati dijalankan sekali.
+- Tugas dibuat lewat `createOwnerTask` (aturan hierarki yang sama dengan tugas manual; validasi saat menyimpan memakai
+  `resolveOwnerTask` tanpa membuat tugas). Judul diberi tanggal, `created_by = recurring:<id>`. Instruksi ditambah
+  catatan agar AI melanjutkan dari hasil sebelumnya, yang tersedia lewat Second Brain.
+- `skip_if_running` (default aktif) melewati jadwal saat tugas sebelumnya masih aktif. Error (mis. bisnis nonaktif)
+  disimpan di aturan dan dikirim sebagai `system:alert`.
+
+### Riset web & kebijakan persetujuan
+
+- `src/research/web.js`: `needsWeb(task)` (kata kunci tren/berita/media sosial/kompetitor/harga/regulasi/…) →
+  `plan()` (jenis + topik dari judul & industri bisnis) → `research()`, yang berisi:
+  - Google News RSS, Google Trends RSS, Wikipedia API, dan DuckDuckGo HTML, ditambah isi 0–5 halaman artikel langsung.
+  - Hasilnya blok teks bersumber [W1]… plus `refs`, disimpan di `tasks.web_refs`.
+  - Keamanan: `assertPublicUrl` (DNS di-resolve, IP privat/loopback/link-local/CGNAT/IPv6 lokal ditolak, dicek ulang di
+    setiap redirect), batas 4 redirect, 8 detik, 800 KB, konten teks saja, cache 1 jam, dan User-Agent bot yang jujur.
+  - Orkestrator (`webFor`) memanggilnya sebelum rencana CEO/Business Manager dan pengerjaan karyawan. Blok masuk ke
+    pesan *user* sebagai data, dengan perintah untuk mengabaikan instruksi di dalamnya.
+  - Pengaturan: `web_research_enabled`, `web_research_pages`. Di tes, alamat sumber diarahkan ke alamat lokal yang
+    ditolak guard, sehingga tes tidak pernah ke internet.
+- `APPROVAL_RULE` (`src/agents/prompts.js`) ada di semua prompt yang bisa menghasilkan rekomendasi. Isinya: tandai
+  "PERLU PERSETUJUAN ADMIN" hanya untuk tindakan penting, dan jangan pernah meminta owner mengisi data manual.
+- `classifyApproval` (`src/holding/approvals.js`) adalah lapis kedua di server:
+  - Hasil: kategori Keuangan, Kontrak & hukum, SDM, Harga, Publikasi, Data & akses, atau Operasional besar
+    (penting); selain itu Informasi atau Permintaan data.
+  - Dengan `approval_important_only` (default aktif), item yang tidak penting dicatat sebagai log tugas
+    `approval_skipped`, bukan approval.
+  - `GET /api/approvals` menyertakan `category`/`important` untuk antrean lama.

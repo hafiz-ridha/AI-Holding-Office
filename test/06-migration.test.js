@@ -57,7 +57,7 @@ test('v1 database with data upgrades to holding without data loss', async () => 
 
   // ---- upgrade exactly as the server does on boot ----
   const applied = migrate({ info() {} }, { backup: () => backup.createBackup('pre-migrate') });
-  assert.equal(applied, 4, 'migrations 002 to 005 are pending');
+  assert.equal(applied, 5, 'migrations 002 to 006 are pending');
   await seed({ info() {}, warn() {} });
 
   // Pre-migration backup exists and still has the v1 schema.

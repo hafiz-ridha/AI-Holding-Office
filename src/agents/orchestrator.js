@@ -19,6 +19,7 @@ import { getBusiness, businessTeam, sharedServices } from '../holding/businesses
 import { businessContextText, holdingOverviewText, canAccessBusiness } from '../holding/context.js';
 import { saveReport } from '../holding/reports.js';
 import { createApprovalsFromResult } from '../holding/approvals.js';
+import { research, needsWeb } from '../research/web.js';
 
 export class BudgetError extends Error {}
 
@@ -68,6 +69,28 @@ function brain(task, employee) {
   }
 }
 
+// Fresh outside data (trends, news, social media, competitors, prices, ...) for tasks that need it, fetched by the
+// server before the AI call and given as cited sources. Quick chat replies only when explicitly asked. Never blocks.
+const CHAT_WEB = /\b(berita|news|tren|trend|cari di internet|cek internet|harga|kurs|viral|terbaru)\b/i;
+async function webFor(task) {
+  if (!getSetting('web_research_enabled') || !needsWeb(task)) return '';
+  if (isChatReply(task) && !CHAT_WEB.test(task.description || task.title)) return '';
+  try {
+    const business = task.business_id ? getBusiness(task.business_id) : null;
+    const r = await research(task, { business, pages: getSetting('web_research_pages') });
+    if (r.refs.length) {
+      q.run('UPDATE tasks SET web_refs = ? WHERE id = ?', JSON.stringify(r.refs), task.id);
+      logTask(task.id, 'web_research', `${r.refs.length} sumber web (${r.plan.kind}: "${r.plan.topic}")${r.errors.length ? `; sebagian gagal: ${r.errors.join('; ')}` : ''}`.slice(0, 500));
+    } else if (r.errors.length) {
+      logTask(task.id, 'web_research_failed', r.errors.join('; ').slice(0, 300), 'warn');
+    }
+    return r.block;
+  } catch (e) {
+    logTask(task.id, 'web_research_failed', e.message, 'warn');
+    return '';
+  }
+}
+
 function finish(task, employee, content, { report = null } = {}) {
   if (report) {
     saveReport({ businessId: task.business_id ?? null, taskId: task.id, scope: report, title: task.title, content, employeeId: employee?.id ?? null });
@@ -98,6 +121,7 @@ async function planHolding(task, signal) {
   const messages = holdingPlanMessages({
     ceo, task, overview: text, shared, maxBusinessTasks, maxShared,
     memories: recentMemories(ceo.id, getSetting('memory_items'), task.business_id ?? null), tz, knowledge: brain(task, ceo),
+    web: await webFor(task),
   });
   const res = await callAI({ task, employee: ceo, messages, purpose: 'plan', signal });
   const plan = extractJsonObject(res.content);
@@ -200,6 +224,7 @@ async function planBusiness(task, signal) {
     manager: bm, task, team: maxSubtasks > 0 ? team : [], maxSubtasks,
     businessContext: businessContextText(bm, task, { kbQuery: `${task.title} ${task.description}` }),
     memories: recentMemories(bm.id, getSetting('memory_items'), b.id), tz, parentTitle: parent?.title, knowledge: brain(task, bm),
+    web: await webFor(task),
   });
   const res = await callAI({ task, employee: bm, messages, purpose: 'plan', signal });
   const plan = extractJsonObject(res.content);
@@ -271,6 +296,7 @@ async function runWork(task, signal) {
     businessContext: task.business_id ? businessContextText(employee, task, { kbQuery: `${task.title} ${task.description}` }) : '',
     memories: recentMemories(employee.id, getSetting('memory_items'), task.business_id ?? null), tz,
     knowledge: brain(task, employee),
+    web: await webFor(task),
   });
   const res = await callAI({ task, employee, messages, purpose: 'work', signal });
   // Quick chat replies are conversation, not work: kept in the chat history only, not in working memory.

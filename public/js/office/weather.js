@@ -5,17 +5,19 @@
 // Settings are a per-browser display preference (localStorage); nothing is stored on the server.
 const KEY = 'office.weather.v1';
 export const KINDS = { cerah: 'Cerah', berawan: 'Berawan', hujan: 'Hujan', badai: 'Badai petir' };
+// Time of day shown in the office: the browser clock (auto) or a fixed period chosen by the owner.
+export const TIMES = { auto: 'Otomatis (jam browser)', morning: 'Pagi', afternoon: 'Siang', evening: 'Sore', night: 'Malam' };
 export const REFRESH_MS = 15 * 60 * 1000;
 
 const validPlace = (p) => p && typeof p.name === 'string' && Number.isFinite(p.lat) && Number.isFinite(p.lon) ? { name: p.name.slice(0, 120), lat: p.lat, lon: p.lon } : null;
 
 export function loadWeatherSettings() {
-  const def = { mode: 'manual', manual: 'cerah', place: null, last: null };
+  const def = { mode: 'manual', manual: 'cerah', place: null, last: null, time: 'auto' };
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (!s || typeof s !== 'object') return def;
     const last = s.last && KINDS[s.last.kind] && Number.isFinite(s.last.at) ? s.last : null;
-    return { mode: s.mode === 'auto' ? 'auto' : 'manual', manual: KINDS[s.manual] ? s.manual : 'cerah', place: validPlace(s.place), last };
+    return { mode: s.mode === 'auto' ? 'auto' : 'manual', manual: KINDS[s.manual] ? s.manual : 'cerah', place: validPlace(s.place), last, time: TIMES[s.time] ? s.time : 'auto' };
   } catch {
     return def;
   }
@@ -23,7 +25,7 @@ export function loadWeatherSettings() {
 
 export function saveWeatherSettings(s) {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ mode: s.mode, manual: s.manual, place: s.place, last: s.last }));
+    localStorage.setItem(KEY, JSON.stringify({ mode: s.mode, manual: s.manual, place: s.place, last: s.last, time: s.time }));
   } catch {
     /* private mode / storage blocked: settings last for this page only */
   }

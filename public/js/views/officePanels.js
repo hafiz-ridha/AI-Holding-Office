@@ -59,11 +59,24 @@ const ROOM_INFO = {
   hr: 'HR: daftar karyawan, kinerja, rekrutmen, dan beban kerja.',
   marketing: 'Marketing Hub: kampanye dan tugas marketing.',
   shared: 'Shared Services: aktivitas departemen bersama dan tugas lintas bisnis.',
-  lounge: 'Lounge: aktivitas karyawan, karyawan yang sedang tidak bertugas, dan info kantor.',
+  lounge: 'Lounge dengan coffee corner dan game corner: siapa yang sedang istirahat, office boy, dan info kantor.',
   manager: 'Ruang manager bisnis.',
   workspace: 'Area kerja tim bisnis.',
-  guests: 'Meja tamu untuk Shared Services yang sedang bekerja untuk bisnis ini.',
+  guests: 'Hot desk untuk tim pusat yang sedang bekerja untuk bisnis ini.',
+  open: 'Open Space: seluruh tim pusat (keuangan, sekretariat, riset, developer, HR, marketing) bekerja bersama.',
+  pool: 'Kolam renang kantor: tempat karyawan tanpa tugas bersantai.',
 };
+
+// Functions of the central team (they all sit in the Open Space; the panel groups them by role).
+const FUNCTIONS = [
+  ['finance', 'Keuangan', ['group_finance', 'finance']],
+  ['reception', 'Sekretariat', ['secretary']],
+  ['research', 'Riset', ['researcher']],
+  ['dev', 'Developer', ['developer']],
+  ['hr', 'HR', ['hr']],
+  ['marketing', 'Marketing', ['marketing']],
+];
+const BREAK = { chat: 'ngobrol', game: 'main game', coffee: 'ngopi', sofa: 'bersantai di sofa', arcade: 'main arcade', swim: 'berenang' };
 
 // env: { data, scene, business, room, shownState, stateBadge, selectEmployee, switchTo, ctx, overview, meetingPanel, businessSummary }
 export async function roomPanel(env) {
@@ -73,11 +86,28 @@ export async function roomPanel(env) {
   return h('div', { class: 'stack-sm room-panel' }, head, body);
 }
 
+// Employees of one function present in this office (by role; rooms no longer split the central team).
 const inRoom = (env, key) => {
+  const roles = FUNCTIONS.find((f) => f[0] === key)?.[2];
   const ids = new Set();
-  for (const c of env.chars.values()) if (c.desk?.room?.key === key) ids.add(c.id);
+  for (const c of env.chars.values()) if (roles ? roles.includes(c.e?.role_key) : c.desk?.room?.key === key) ids.add(c.id);
   return env.data.employees.filter((e) => ids.has(e.id));
 };
+
+// People on a break right now (visual only) and the office boys' current jobs.
+function breakList(env, filter = () => true) {
+  const on = [...env.chars.values()].filter((c) => c.e && c.outing && filter(c));
+  return on.length
+    ? h('div', { class: 'stack-xs' }, on.map((c) => h('button', { class: 'office-biz-link', type: 'button', onclick: () => env.selectEmployee(c.id) },
+        avatarCanvas(c.e.avatar, 1), h('span', { class: 'grow' }, c.e.name, h('span', { class: 'small muted' }, ` · ${BREAK[c.outing.kind] || 'istirahat'}`)), env.stateBadge(env.shownState(c.e)))))
+    : note('Tidak ada yang sedang istirahat di sini.');
+}
+function obList(env) {
+  const list = [...(env.npcs?.values() || [])];
+  return list.length
+    ? h('div', { class: 'stack-xs' }, list.map((n) => h('div', { class: 'office-biz-link' }, avatarCanvas(n.avatar, 1), h('span', { class: 'grow' }, `OB ${n.name}`, h('div', { class: 'small muted' }, n.note)))))
+    : note('Tidak ada office boy di kantor ini.');
+}
 
 const BUILDERS = {
   async ceo(env, data) {
@@ -233,8 +263,11 @@ const BUILDERS = {
     const now = new Date();
     return [
       section('Aktivitas karyawan', h('div', { class: 'row' }, Object.entries(counts).map(([k, v]) => h('span', { class: 'pill' }, env.stateBadge(k), ` ${v}`)))),
+      section('Sedang istirahat', breakList(env),
+        note('Karyawan tanpa tugas sesekali ngobrol, ngopi, main ping-pong/foosball/arcade, atau berenang. Obrolan santai hanya tampil di kantor dan tidak disimpan. Begitu ada tugas, mereka langsung kembali ke meja.')),
+      section('Office boy', obList(env)),
       section(`Sedang tidak bertugas (${free.length})`, free.length ? h('div', { class: 'stack-xs' }, free.map((e) => personRow(e, env))) : note('Semua karyawan sedang bertugas.'),
-        note('IDLE = jalan-jalan di ruangannya. RESTING = tidak ada aktivitas ≥ 20 menit (dari riwayat tugas), duduk santai di mejanya.')),
+        note('IDLE = tidak ada tugas. RESTING = tidak ada aktivitas ≥ 20 menit (dari riwayat tugas), lebih sering istirahat di lounge atau kolam.')),
       section('Info kantor', h('dl', { class: 'kv small' },
         h('dt', null, 'Kantor'), h('dd', null, env.scene.title),
         h('dt', null, 'Waktu lokal'), h('dd', null, now.toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })),
@@ -245,6 +278,43 @@ const BUILDERS = {
 
   async manager(env) {
     return env.businessSummary();
+  },
+
+  // Open Space: the whole central team grouped by function, their tasks, and per-function details on demand.
+  async open(env, data) {
+    const team = [...env.chars.values()].filter((c) => c.e && c.desk?.room?.key === 'open').map((c) => data.employees.find((e) => e.id === c.id)).filter(Boolean);
+    const known = new Set(FUNCTIONS.flatMap((f) => f[2]));
+    const groups = [...FUNCTIONS.map(([, label, roles]) => [label, team.filter((e) => roles.includes(e.role_key))]), ['Lainnya', team.filter((e) => !known.has(e.role_key))]].filter(([, l]) => l.length);
+    const tasks = await tasksOf(team.filter((e) => ACTIVE.has(e.state)).map((e) => e.id).concat(team.map((e) => e.id)).filter((v, i, a) => a.indexOf(v) === i));
+    const lazy = (title, key) => {
+      const body = h('div', { class: 'stack-sm', style: { marginTop: '6px' } }, note('Memuat…'));
+      let loaded = false;
+      const el = h('details', { class: 'room-card' }, h('summary', { class: 'small' }, h('b', null, title)), body);
+      el.addEventListener('toggle', async () => {
+        if (!el.open || loaded) return;
+        loaded = true;
+        try {
+          const nodes = await BUILDERS[key](env, data);
+          body.replaceChildren(...[nodes].flat().filter(Boolean));
+        } catch (e) {
+          body.replaceChildren(note(e.message));
+        }
+      });
+      return el;
+    };
+    return [
+      section(`Tim (${team.length})`, groups.length ? groups.map(([label, list]) => h('div', { class: 'stack-xs' }, h('div', { class: 'small muted' }, label), list.map((e) => personRow(e, env)))) : note('Belum ada tim pusat.')),
+      section('Tugas tim', taskList(tasks, 'Belum ada tugas tim pusat.')),
+      section('Detail per fungsi', lazy('Keuangan grup', 'finance'), lazy('Sekretariat: dokumen & jadwal', 'reception'), lazy('Riset & laporan', 'research'), lazy('Sistem & server (developer)', 'dev'), lazy('SDM & kinerja', 'hr'), lazy('Marketing', 'marketing')),
+    ];
+  },
+
+  async pool(env) {
+    return [
+      section('Sedang berenang', breakList(env, (c) => c.outing.kind === 'swim')),
+      section('Office boy', obList(env)),
+      note('Hanya suasana: karyawan tanpa tugas sesekali berenang, dan office boy membersihkan kolam. Tidak ada data yang disimpan.'),
+    ];
   },
 
   async workspace(env, data) {
@@ -262,8 +332,8 @@ const BUILDERS = {
     const visiting = data.employees.filter((e) => env.scene.visitorFilter(e));
     const assigned = data.employees.filter((e) => e.org_unit === 'shared' && e.business_ids?.includes(b.id));
     return [
-      section('Sedang berkunjung', visiting.length ? h('div', { class: 'stack-xs' }, visiting.map((e) => personRow(e, env))) : note('Tidak ada Shared Services yang sedang bekerja untuk bisnis ini.')),
-      section('Shared Services yang ditugaskan tetap', assigned.length ? h('div', { class: 'stack-xs' }, assigned.map((e) => personRow(e, env))) : note('Tidak ada.')),
+      section('Sedang berkunjung', visiting.length ? h('div', { class: 'stack-xs' }, visiting.map((e) => personRow(e, env))) : note('Tidak ada tim pusat yang sedang bekerja untuk bisnis ini.')),
+      section('Tim pusat yang ditugaskan tetap', assigned.length ? h('div', { class: 'stack-xs' }, assigned.map((e) => personRow(e, env))) : note('Tidak ada.')),
     ];
   },
 };

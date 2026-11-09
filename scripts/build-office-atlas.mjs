@@ -321,6 +321,9 @@ const FONT = {
   K: ['101', '110', '100', '110', '101'], L: ['100', '100', '100', '100', '111'], M: ['101', '111', '111', '101', '101'],
   O: ['010', '101', '101', '101', '010'], P: ['110', '101', '110', '100', '100'], I: ['111', '010', '010', '010', '111'],
   W: ['101', '101', '111', '111', '101'], S: ['011', '100', '010', '001', '110'], N: ['101', '111', '111', '111', '101'],
+  U: ['101', '101', '101', '101', '111'], F: ['111', '100', '110', '100', '100'], T: ['111', '010', '010', '010', '010'],
+  H: ['101', '101', '111', '101', '101'], R: ['110', '101', '110', '101', '101'], D: ['110', '101', '101', '101', '110'],
+  B: ['110', '101', '110', '101', '110'], G: ['011', '100', '101', '101', '011'], Y: ['101', '101', '010', '010', '010'],
 };
 function text(g, s, x, y, c) {
   let cx = x;
@@ -341,6 +344,11 @@ const WALLS = {
   wood: ['#c99a6c', '#b4865a', 'panel'],
   lav: ['#e6e0f0', '#d1c8e3', 'dots'],
   peach: ['#f5e2cf', '#e7cdb2', 'stripe'],
+  // v5 startup office: exposed brick, raw concrete, glass partition, pool tiles
+  brick: ['#b9694d', '#9c553d', 'brick'],
+  concrete: ['#d3d2cc', '#bebcb5', 'concrete'],
+  glass: ['#d7ecf4', '#b5d6e4', 'glass'],
+  pooltile: ['#e3f3f8', '#bfe0ea', 'grid'],
 };
 function wallBase(g, face, faceD, pattern) {
   g.r(0, 0, 16, 6, P.wallCap); g.r(0, 0, 16, 1, P.wallCapL); g.r(0, 5, 16, 1, '#4e3d31');
@@ -349,6 +357,15 @@ function wallBase(g, face, faceD, pattern) {
   if (pattern === 'dots') for (let y = 10; y < 22; y += 5) for (let x = (y % 2) + 2; x < 16; x += 6) g.px(x, y, faceD);
   if (pattern === 'grid') { for (let x = 0; x < 16; x += 8) g.r(x, 8, 1, 14, faceD); g.r(0, 15, 16, 1, faceD); }
   if (pattern === 'panel') { g.r(0, 8, 16, 1, '#a87a50'); g.r(7, 8, 1, 14, '#a87a50'); g.r(15, 8, 1, 14, '#a87a50'); g.r(1, 9, 5, 1, '#d8ab7d'); }
+  if (pattern === 'brick') {
+    for (let y = 8, row = 0; y < 22; y += 3, row++) {
+      g.r(0, y + 2, 16, 1, '#e3c9b4');
+      for (let x = row % 2 ? 4 : 0; x < 16; x += 8) g.r(x, y, 1, 2, '#e3c9b4');
+      g.r(row % 2 ? 6 : 2, y, 2, 1, '#c97b5e');
+    }
+  }
+  if (pattern === 'concrete') { for (const [x, y] of [[3, 10], [11, 13], [6, 18], [13, 9], [1, 16], [9, 20]]) g.px(x, y, faceD); g.r(0, 14, 16, 1, '#c8c6bf'); g.px(4, 14, '#9e9c95'); g.px(12, 14, '#9e9c95'); }
+  if (pattern === 'glass') { g.r(0, 8, 16, 14, '#cbe6f1'); g.r(0, 8, 1, 14, '#8fb9cc'); g.r(15, 8, 1, 14, '#8fb9cc'); g.r(3, 9, 3, 6, '#eef8fc'); g.r(9, 12, 2, 4, '#eef8fc'); g.r(0, 15, 16, 1, '#a9cfe0'); }
   g.r(0, 22, 16, 1, '#b8987a'); // chair rail
   g.r(0, 23, 16, 6, faceD);
   g.r(0, 29, 16, 3, P.base); g.r(0, 29, 16, 1, '#b8987a');
@@ -825,6 +842,233 @@ def('p_sign', 12, 24, (g) => {
   g.box(0, 0, 12, 11, '#2f6fd0', P.white);
   g.r(4, 2, 2, 7, P.white); g.r(6, 2, 2, 1, P.white); g.r(8, 3, 1, 2, P.white); g.r(6, 5, 2, 1, P.white);
 });
+
+// =====================================================================================
+// v5: startup office — open space, lounge with coffee corner & game corner, swimming pool, office boys' items.
+// =====================================================================================
+const ellipse = (g, w, h, fn) => {
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const dx = (x + 0.5 - w / 2) / (w / 2);
+    const dy = (y + 0.5 - h / 2) / (h / 2);
+    const d = dx * dx + dy * dy;
+    if (d <= 1) { const c = fn(d, dx, dy, x, y); if (c) g.px(x, y, c); }
+  }
+};
+
+// ---- floors ----
+def('floor_concrete', 16, 16, (g) => {
+  g.r(0, 0, 16, 16, '#c9c8c2');
+  for (const [x, y] of [[2, 3], [9, 1], [13, 6], [5, 9], [11, 12], [1, 13], [7, 5], [14, 14], [4, 15], [12, 3]]) g.px(x, y, '#bdbcb5');
+  for (const [x, y] of [[6, 2], [10, 9], [3, 11]]) g.px(x, y, '#d6d5cf');
+  g.r(0, 15, 16, 1, '#b7b6af'); g.r(15, 0, 1, 16, '#b7b6af');
+});
+def('floor_deck', 16, 16, (g) => {
+  g.r(0, 0, 16, 16, '#e9dfca');
+  g.r(0, 0, 8, 8, '#e3d7bf'); g.r(8, 8, 8, 8, '#e3d7bf');
+  g.r(0, 7, 16, 1, '#d2c4a6'); g.r(7, 0, 1, 16, '#d2c4a6'); g.r(0, 15, 16, 1, '#d2c4a6'); g.r(15, 0, 1, 16, '#d2c4a6');
+  g.px(3, 3, '#f2ead9'); g.px(11, 11, '#f2ead9');
+});
+def('floor_terrazzo', 16, 16, (g) => {
+  g.r(0, 0, 16, 16, '#ece6dc');
+  const chips = [[2, 2, '#c9a27a'], [7, 4, '#8fb3a6'], [12, 2, '#d98c7a'], [4, 8, '#9aa7c4'], [10, 9, '#c9a27a'], [14, 12, '#8fb3a6'], [1, 13, '#d98c7a'], [7, 13, '#b8b2a7'], [12, 6, '#b8b2a7']];
+  for (const [x, y, c] of chips) { g.px(x, y, c); g.px(x + 1, y, c); }
+  g.r(0, 15, 16, 1, '#ddd6ca'); g.r(15, 0, 1, 16, '#ddd6ca');
+});
+// Pool water tile: pool-floor grid seen through the water (the engine adds moving highlights).
+def('pool_water', 16, 16, (g) => {
+  g.r(0, 0, 16, 16, '#45aed6');
+  g.r(0, 15, 16, 1, '#5bbde0'); g.r(15, 0, 1, 16, '#5bbde0');
+  g.r(0, 7, 16, 1, '#4fb5dc'); g.r(7, 0, 1, 16, '#4fb5dc');
+  g.px(3, 4, '#7fd0ec'); g.px(4, 4, '#7fd0ec'); g.px(11, 10, '#7fd0ec'); g.px(12, 10, '#7fd0ec');
+});
+
+// ---- swimming pool props ----
+def('pool_ladder', 12, 14, (g) => {
+  for (const x of [1, 9]) { g.r(x, 0, 2, 13, '#c9d3dc'); g.r(x, 0, 1, 13, '#f2f6f8'); g.r(x, 13, 2, 1, '#7d8a96'); }
+  for (const y of [5, 9]) g.r(3, y, 6, 1, '#ffffff99');
+  g.r(0, 0, 4, 2, '#c9d3dc'); g.r(8, 0, 4, 2, '#c9d3dc');
+});
+def('lounger', 30, 14, (g) => {
+  g.r(2, 12, 27, 2, '#00000026');
+  g.box(0, 1, 30, 11, '#f2f2ee', P.ol);
+  g.r(1, 2, 10, 9, '#dcdcd6'); // raised back rest
+  for (let x = 2; x < 29; x += 4) g.r(x, 3, 2, 7, x < 11 ? '#4f8fc0' : '#5ea3d6');
+  g.r(1, 2, 28, 1, '#ffffff');
+  g.r(11, 1, 1, 11, '#c2c2bb');
+  g.r(2, 3, 6, 3, '#ffffffcc'); // pillow
+});
+def('parasol', 28, 28, (g) => {
+  ellipse(g, 28, 28, (d, dx, dy) => {
+    if (d > 0.92) return P.ol;
+    const a = Math.atan2(dy, dx);
+    const seg = Math.floor(((a + Math.PI) / (2 * Math.PI)) * 8) % 2;
+    const base = seg ? '#e85d4a' : '#f7f2e6';
+    return dy < -0.3 && dx < 0.3 ? (seg ? '#f07a69' : '#ffffff') : base;
+  });
+  g.r(13, 13, 2, 2, '#8a5a37'); g.px(13, 13, '#c99466');
+});
+def('float_ring', 12, 12, (g) => {
+  ellipse(g, 12, 12, (d, dx, dy) => {
+    if (d < 0.22) return null;
+    if (d > 0.9 || (d > 0.22 && d < 0.3)) return '#8f2e29';
+    const q = (dx > 0) === (dy > 0);
+    return q ? '#e84a3c' : '#f7f2e6';
+  });
+});
+for (const [name, sway] of [['palm', 0], ['palm_b', 1]]) {
+  def(name, 22, 34, (g) => {
+    g.r(4, 32, 14, 2, '#00000022');
+    g.box(5, 24, 12, 9, '#d9cbb3', P.ol); g.r(6, 25, 10, 1, '#efe5d3'); g.r(6, 31, 10, 1, '#b9ab93');
+    for (let y = 10; y < 25; y++) g.r(10 + (y < 16 ? sway : 0), y, 2, 1, y % 3 ? '#8a6a44' : '#6b4f30');
+    const frond = (x0, y0, dir, len) => { for (let i = 0; i < len; i++) { const x = x0 + dir * i; const y = y0 + Math.round(i * i * 0.08); g.r(x, y, 2, 2, i % 2 ? P.green : P.greenL); g.px(x, y + 2, P.greenD); } };
+    frond(11 + sway, 9, -1, 10); frond(11 + sway, 9, 1, 10); frond(11 + sway, 7, -1, 6); frond(11 + sway, 7, 1, 6);
+    g.r(9 + sway, 5, 4, 5, P.greenD); g.r(10 + sway, 4, 2, 2, P.greenL);
+  });
+}
+def('lifebuoy', 12, 12, (g) => {
+  ellipse(g, 12, 12, (d, dx, dy) => (d < 0.25 ? null : d > 0.88 ? '#8f2e29' : (Math.abs(dx) > Math.abs(dy) ? '#f07a3a' : '#f7f2e6')));
+  g.r(5, 0, 2, 1, '#5d4636');
+});
+def('towel_rack', 18, 22, (g) => {
+  g.r(1, 20, 16, 2, '#00000022');
+  g.r(1, 2, 2, 18, P.woodD); g.r(15, 2, 2, 18, P.woodD); g.r(1, 2, 16, 2, P.wood);
+  g.r(3, 4, 5, 12, '#5ea3d6'); g.r(3, 6, 5, 1, P.white); g.r(3, 10, 5, 1, P.white);
+  g.r(9, 4, 5, 10, '#f2c14e'); g.r(9, 7, 5, 1, '#fff2b8');
+  g.r(1, 12, 16, 1, P.woodD);
+});
+def('pool_shower', 10, 28, (g) => {
+  g.r(1, 26, 8, 2, '#00000022');
+  g.box(0, 22, 10, 5, '#d7dde3', '#9aa5b1');
+  g.r(4, 4, 2, 19, '#c9d3dc'); g.r(4, 4, 1, 19, '#f2f6f8');
+  g.r(4, 3, 5, 2, '#c9d3dc'); g.box(6, 4, 4, 3, '#aab6c2', '#7d8a96'); g.px(7, 7, '#9fd0ea'); g.px(8, 8, '#9fd0ea');
+});
+
+// ---- coffee corner ----
+def('coffee_bar', 56, 28, (g) => {
+  g.r(2, 26, 52, 2, '#00000026');
+  // counter top
+  g.box(0, 10, 56, 6, '#d9b58c', P.ol); g.r(1, 11, 54, 1, '#ecd0ad');
+  // front panel with vertical slats
+  g.box(0, 15, 56, 11, '#6b4428', P.ol);
+  for (let x = 3; x < 54; x += 4) g.r(x, 16, 1, 9, '#5a381f');
+  g.r(1, 24, 54, 1, '#4a2e19');
+  // espresso machine
+  g.box(4, 1, 16, 10, '#c9d3dc', P.ol); g.r(5, 2, 14, 2, '#eef2f5'); g.r(6, 5, 12, 1, '#7d8a96');
+  g.r(7, 7, 3, 3, '#3d434e'); g.r(14, 7, 3, 3, '#3d434e'); g.px(11, 3, '#e5484d'); g.px(13, 3, '#5dd39e');
+  // grinder
+  g.r(23, 2, 6, 3, '#6b4428'); g.r(22, 5, 8, 6, '#2b2f37'); g.r(24, 1, 4, 2, '#8a5a37'); g.px(25, 7, '#c9d3dc');
+  // cups
+  for (const x of [33, 37]) { g.r(x, 7, 3, 4, P.white); g.r(x, 7, 3, 1, '#6b4428'); }
+  g.r(33, 4, 3, 3, P.white); g.r(37, 4, 3, 3, '#5ea3d6');
+  // cake dome
+  g.r(43, 4, 9, 7, '#cfe8f2'); g.r(44, 3, 7, 1, '#cfe8f2'); g.r(46, 2, 3, 1, '#9aa5b1'); g.r(45, 7, 5, 3, '#c98b5a'); g.r(45, 7, 5, 1, '#f7f2e6'); g.r(44, 4, 1, 3, '#ffffffaa');
+  g.r(42, 10, 11, 1, '#9aa5b1');
+});
+def('bar_stool', 10, 12, (g) => {
+  g.r(2, 10, 7, 2, '#00000022');
+  g.r(4, 5, 2, 6, '#5d6573'); g.r(2, 10, 6, 1, '#5d6573');
+  ellipse(g, 10, 7, (d) => (d > 0.8 ? P.ol : d < 0.3 ? '#3a3f4b' : '#2b2f37'));
+});
+board('coffee_menu', 30, 22, '#6b4428', '#2b2f2d', (g) => {
+  text(g, 'COFFEE', 3, 3, '#f7f2e6');
+  for (let i = 0; i < 3; i++) { g.r(3, 11 + i * 3, 14, 1, '#cfd6cf'); g.r(22, 11 + i * 3, 4, 1, '#f2c14e'); }
+});
+def('drink_fridge', 16, 28, (g) => {
+  g.r(1, 26, 14, 2, '#00000022');
+  g.box(0, 0, 16, 26, '#e7ecf0', P.ol); g.r(1, 1, 14, 3, '#5ea3d6');
+  g.r(2, 5, 12, 19, '#cfe8f2');
+  const cols = ['#e5484d', '#f2c14e', '#5dd39e', '#8a6fb0'];
+  for (let s = 0; s < 3; s++) { g.r(2, 10 + s * 6, 12, 1, '#9aa5b1'); for (let i = 0; i < 4; i++) g.r(3 + i * 3, 6 + s * 6, 2, 4, cols[(i + s) % 4]); }
+  g.r(13, 9, 1, 8, '#7d8a96');
+});
+
+// ---- game corner ----
+def('pingpong', 46, 28, (g) => {
+  g.r(2, 26, 43, 2, '#00000026');
+  g.r(3, 22, 2, 4, P.metalDD); g.r(41, 22, 2, 4, P.metalDD);
+  g.box(0, 2, 46, 21, '#2f6f8f', P.ol);
+  g.r(1, 3, 44, 1, '#f7f2e6'); g.r(1, 21, 44, 1, '#f7f2e6'); g.r(1, 3, 1, 19, '#f7f2e6'); g.r(44, 3, 1, 19, '#f7f2e6');
+  g.r(2, 12, 42, 1, '#cfe1ea');
+  g.r(22, 0, 2, 25, '#f7f2e6'); g.r(22, 0, 2, 1, P.ol); g.r(21, 1, 1, 23, '#1f2937'); g.r(24, 1, 1, 23, '#3d5a6b'); // net
+  g.r(7, 6, 5, 5, '#c2413a'); g.r(9, 11, 1, 3, '#8a5a37'); // paddle red
+  g.r(34, 14, 5, 5, '#2b2f37'); g.r(36, 19, 1, 3, '#8a5a37'); // paddle black
+  g.px(30, 8, P.white);
+});
+def('foosball', 38, 24, (g) => {
+  g.r(2, 22, 35, 2, '#00000026');
+  g.box(0, 2, 38, 19, '#8a5a37', P.ol); g.r(2, 4, 34, 15, '#4f9a54');
+  g.r(19, 4, 1, 15, '#ffffff88'); g.r(2, 9, 2, 5, '#ffffff88'); g.r(34, 9, 2, 5, '#ffffff88');
+  for (let i = 0; i < 4; i++) {
+    const x = 9 + i * 7;
+    g.r(x, 0, 1, 24, '#c9d3dc');
+    g.r(x, 0, 1, 2, '#2b2f37'); g.r(x, 22, 1, 2, '#2b2f37');
+    for (const y of [7, 14]) g.r(x - 1, y, 3, 2, i % 2 ? '#3f6fb5' : '#d65a4a');
+  }
+  g.px(17, 11, P.white);
+});
+def('arcade', 18, 32, (g) => {
+  g.r(1, 30, 16, 2, '#00000026');
+  g.box(1, 0, 16, 30, '#4b2f7a', P.ol);
+  g.r(2, 1, 14, 5, '#f2c14e'); g.r(3, 2, 12, 1, '#ff6ad5'); g.r(3, 4, 12, 1, '#ff6ad5');
+  g.box(3, 7, 12, 10, '#0b1020', '#2b2f37');
+  g.box(1, 18, 16, 6, '#5a3d8a', P.ol); g.r(4, 19, 2, 3, '#1f2329'); g.px(4, 19, '#e5484d'); g.px(9, 20, '#e5484d'); g.px(11, 20, '#f2c14e'); g.px(13, 20, '#5dd39e');
+  g.r(1, 8, 1, 10, '#ff6ad5'); g.r(16, 8, 1, 10, '#5ec8f0');
+  g.r(5, 25, 8, 3, '#2b2f37'); g.r(7, 26, 4, 1, '#f2c14e');
+});
+def('dartboard', 12, 12, (g) => {
+  ellipse(g, 12, 12, (d, dx, dy) => (d > 0.86 ? '#1f2329' : d > 0.55 ? ((Math.atan2(dy, dx) * 4 / Math.PI + 8) % 2 < 1 ? '#c2413a' : '#f2eee4') : d > 0.25 ? '#2b2f37' : d > 0.06 ? '#3f8a4a' : '#c2413a'));
+});
+
+// ---- startup decor ----
+def('neon_sign', 40, 14, (g) => {
+  g.box(0, 0, 40, 14, '#22202a', '#141218');
+  text(g, 'AI LAB', 8, 4, '#ff6ad5');
+  for (let x = 2; x < 38; x += 3) { g.px(x, 1, '#5ec8f0'); g.px(x + 1, 12, '#5ec8f0'); }
+});
+def('phone_booth', 22, 34, (g) => {
+  g.r(1, 32, 20, 2, '#00000026');
+  g.box(0, 0, 22, 32, '#3d434e', P.ol); g.r(1, 1, 20, 3, '#5f7fb3');
+  g.box(3, 5, 16, 25, '#9fd0ea', '#2b2f37'); g.r(4, 6, 4, 18, '#cdeaf7');
+  g.r(8, 18, 6, 8, '#5f7fb3'); g.r(9, 14, 4, 4, '#e0ac69'); // someone's chair + lamp silhouette
+  g.r(16, 16, 1, 4, '#2b2f37');
+});
+def('bike_rack', 32, 20, (g) => {
+  g.r(2, 18, 28, 2, '#00000022');
+  g.r(1, 15, 30, 2, '#7d8a96');
+  const wheel = (cx) => { for (let a = 0; a < 24; a++) { const t = (a / 24) * Math.PI * 2; g.px(Math.round(cx + Math.cos(t) * 6), Math.round(10 + Math.sin(t) * 6), '#1f2329'); } g.px(cx, 10, '#9aa5b1'); };
+  wheel(8); wheel(24);
+  for (let i = 0; i <= 8; i++) { g.px(8 + i, 10 - Math.round(i * 0.5), '#2fa6a0'); g.px(16 + i, 6 + Math.round(i * 0.5), '#2fa6a0'); }
+  g.r(12, 4, 6, 1, '#2fa6a0'); g.r(14, 2, 4, 2, '#2b2f37'); g.r(21, 3, 4, 1, '#2b2f37');
+});
+def('ob_cart', 22, 22, (g) => {
+  g.r(1, 20, 20, 2, '#00000026');
+  g.box(1, 4, 20, 14, '#8a93a3', P.ol); g.r(2, 10, 18, 1, '#5d6573');
+  g.box(3, 6, 8, 8, '#f2c14e', '#a8792a'); g.r(4, 7, 6, 2, '#5ea3d6');
+  g.r(13, 3, 3, 6, '#3f6fb5'); g.r(17, 4, 3, 5, '#5dd39e'); g.r(13, 2, 2, 1, P.white);
+  g.r(12, 12, 8, 5, '#1f2329');
+  g.r(0, 4, 1, 12, '#5d6573');
+  g.r(3, 18, 3, 2, '#2b2f37'); g.r(16, 18, 3, 2, '#2b2f37');
+});
+
+// ---- office boy items (drawn in the hands / next to the NPC) ----
+def('ob_tray', 10, 6, (g) => {
+  g.r(0, 4, 10, 2, '#9aa5b1'); g.r(0, 4, 10, 1, '#dfe5ea');
+  g.r(1, 1, 3, 3, P.white); g.r(1, 1, 3, 1, '#6b4428'); g.r(6, 1, 3, 3, P.white); g.r(6, 1, 3, 1, '#6b4428');
+});
+def('ob_mop', 8, 20, (g) => {
+  g.r(3, 0, 1, 15, '#b07a4f'); g.r(4, 0, 1, 15, '#8a5a37');
+  g.r(1, 15, 6, 2, '#9aa5b1'); for (let x = 0; x < 8; x += 2) g.r(x, 17, 1, 3, '#d7dde3');
+});
+def('wet_sign', 10, 13, (g) => {
+  g.r(1, 11, 9, 2, '#00000022');
+  g.box(1, 0, 8, 11, '#f2c14e', '#7a5b00'); g.r(2, 1, 6, 1, '#fff2b8');
+  g.r(4, 3, 2, 4, '#1f2329'); g.r(4, 8, 2, 1, '#1f2329');
+});
+def('ob_net', 6, 22, (g) => {
+  g.box(0, 0, 6, 6, '#cfe8f2', '#3f6fb5'); g.px(2, 2, '#3f6fb5'); g.px(3, 3, '#3f6fb5');
+  g.r(2, 6, 2, 16, '#c9d3dc'); g.r(2, 6, 1, 16, '#f2f6f8');
+});
+def('ob_can', 9, 7, (g) => { g.box(1, 2, 6, 5, '#4f9a54', '#2f6a35'); g.r(2, 3, 4, 1, '#86c46c'); g.r(7, 2, 2, 1, '#4f9a54'); g.px(8, 1, '#4f9a54'); g.r(2, 0, 4, 1, '#2f6a35'); g.px(1, 1, '#2f6a35'); g.px(6, 1, '#2f6a35'); });
 
 // ---------------- pack (shelf packing, 2px padding) ----------------
 const PAD = 2;

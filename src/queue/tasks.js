@@ -320,6 +320,8 @@ export function taskPublic(t, extra = {}) {
     model_used: t.model_used,
     model_choice: json(t.model_choice, null),
     knowledge_refs: json(t.knowledge_refs, []),
+    recurring_id: t.recurring_id ?? null,
+    web_refs: json(t.web_refs, []),
     tokens_in: t.tokens_in,
     tokens_out: t.tokens_out,
     tokens_estimated: t.tokens_estimated,

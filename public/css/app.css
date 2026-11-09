@@ -362,6 +362,38 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .timeline { font-size: 12.5px; }
 .timeline .list-item { padding: 6px 0; }
 .kbd { font-family: var(--mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--border); padding: 0 5px; border-radius: 4px; }
+.web-refs { margin: 10px 0 0; padding-left: 26px; display: grid; gap: 4px; }
+.web-refs li::marker { content: '[W' counter(list-item) '] '; color: var(--muted); font-size: 11px; }
+.web-refs a { overflow-wrap: anywhere; }
+.cat-chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); vertical-align: 1px; }
+.cat-chip.imp { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+/* Task Manager: recurring tasks */
+.rec-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.rec-row { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--border); }
+.rec-row:first-child { border-top: 0; }
+.rec-row.off { opacity: 0.65; }
+.rec-actions { flex-wrap: wrap; justify-content: flex-end; gap: 2px; }
+.day-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; cursor: pointer; }
+.day-chip input { margin: 0; }
+@media (max-width: 760px) { .rec-row { flex-direction: column; align-items: stretch; } .rec-actions { justify-content: flex-start; } }
+/* Approvals: header filters, bulk bar (sticky while items are selected), selectable cards. */
+.approvals-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.approvals-filters { display: grid; grid-template-columns: 200px 160px; gap: 8px; }
+.bulk-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 16px; }
+.bulk-bar.active { position: sticky; top: 8px; z-index: 5; border-color: var(--primary); background: var(--primary-soft); }
+.bulk-bar .check { font-weight: 600; }
+.approval-card { display: flex; align-items: flex-start; gap: 12px; }
+.approval-card.selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+.approval-pick { display: flex; padding: 2px 0; cursor: pointer; }
+.approval-pick input, .bulk-bar .check input { width: 18px; height: 18px; cursor: pointer; }
+.approval-actions { flex-wrap: nowrap; }
+.bulk-list { margin: 0; padding-left: 18px; max-height: 260px; overflow-y: auto; display: grid; gap: 6px; }
+@media (max-width: 640px) {
+  .approvals-filters { grid-template-columns: 1fr 1fr; width: 100%; }
+  .approval-card { flex-wrap: wrap; }
+  .approval-card.has-pick { display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 12px; row-gap: 10px; }
+  .approval-card.has-pick > .approval-actions { grid-column: 2; }
+}
 /* Telegram setup guide: numbered steps, ticked when the saved settings show the step is done. */
 .setup-steps { list-style: none; margin: 14px 0 0; padding: 0; counter-reset: step; display: grid; gap: 12px; }
 .setup-steps > li { counter-increment: step; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; }
@@ -436,5 +468,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .office-float .float-close { position: absolute; top: 8px; right: 8px; z-index: 1; }
 .office-float .room-head { padding-right: 30px; }
 .os-btn { font: inherit; color: inherit; cursor: pointer; }
+button.os-clock { background: none; border: 1px solid transparent; border-radius: 3px; padding: 1px 4px; color: #e9c99a; }
+/* Office full screen (Fullscreen API, or a fixed overlay where the API is missing). */
+.office-main.is-fs { background: #14161b; padding: 8px; overflow: hidden; }
+.office-main.is-fs .legend { display: none; }
+.office-main.pseudo-fs { position: fixed; inset: 0; z-index: 1000; }
+.office-main:fullscreen { width: 100vw; height: 100vh; }
 .os-btn:hover, .os-btn:focus-visible { border-color: #e9c99a; outline: none; }
 .office-float input[type='search'] { min-width: 0; flex: 1; padding: 4px 8px; font-size: 12.5px; }

@@ -6,7 +6,7 @@ import { buildHQScene, buildBusinessScene, sceneKey } from '../office/scenes.js'
 import { OfficeEngine, dayPeriod } from '../office/engine.js';
 import { avatarCanvas } from '../office/sprites.js';
 import { createSound } from '../office/sound.js';
-import { KINDS, loadWeatherSettings, saveWeatherSettings, fetchCurrentWeather, searchPlaces, REFRESH_MS } from '../office/weather.js';
+import { KINDS, TIMES, loadWeatherSettings, saveWeatherSettings, fetchCurrentWeather, searchPlaces, REFRESH_MS } from '../office/weather.js';
 import { createChat } from './chat.js';
 import { roomPanel } from './officePanels.js';
 
@@ -24,6 +24,8 @@ export const STATE = {
 const ACTIVE = new Set(['working', 'thinking', 'meeting']);
 const PHASE = { planning: 'Perencanaan', executing: 'Dikerjakan tim', synthesizing: 'Menggabungkan hasil (rapat)' };
 const PERIOD = { morning: 'Pagi', afternoon: 'Siang', evening: 'Sore', night: 'Malam' };
+// Breaks of employees without a task (purely visual, nothing is stored).
+const BREAK = { chat: 'Sedang ngobrol santai', game: 'Sedang main game', coffee: 'Sedang ngopi di coffee corner', sofa: 'Sedang bersantai di sofa', arcade: 'Sedang main arcade', swim: 'Sedang berenang' };
 
 const stateBadge = (s) => h('span', { class: 'state-chip', style: { '--c': STATE[s]?.color || '#999' } }, STATE[s]?.label || s);
 
@@ -37,7 +39,8 @@ export async function render(root, [initial = 'hq'], ctx) {
   const sb = {};
   const sbItem = (k, label) => h('span', { class: 'os-item' }, h('small', null, label), (sb[k] = h('b', null, '–')));
   const statusBar = h('div', { class: 'office-status', role: 'status', 'aria-label': 'Status holding' },
-    h('div', { class: 'os-brand' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), h('b', null, 'AI Virtual Holding'), (sb.clock = h('span', { class: 'os-clock' }))),
+    h('div', { class: 'os-brand' }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), h('b', null, 'AI Virtual Holding'),
+      (sb.clock = h('button', { class: 'os-clock os-btn', type: 'button', title: 'Atur waktu: otomatis (jam browser) atau manual pagi/siang/sore/malam', onclick: () => openFloat({ kind: 'weather' }, 0) }))),
     h('div', { class: 'os-stats' },
       h('button', { class: 'os-item os-btn', type: 'button', title: 'Atur cuaca: otomatis atau manual', onclick: () => openFloat({ kind: 'weather' }, 0) }, h('small', null, 'Cuaca'), (sb.wx = h('b', null, '–'))),
       sbItem('emp', 'Karyawan'), sbItem('working', 'Bekerja'), sbItem('active', 'Tugas aktif'), sbItem('done', 'Selesai hari ini'), sbItem('biz', 'Bisnis'),
@@ -59,12 +62,15 @@ export async function render(root, [initial = 'hq'], ctx) {
     btnSound.setAttribute('aria-pressed', String(on));
     btnSound.textContent = on ? '♪ On' : '♪ Off';
   } }, '♪ Off');
+  // Full screen: the office (status bar + canvas) fills the screen. Fallback for browsers without the Fullscreen API
+  // (e.g. iPhone Safari): the same area covers the window.
+  const btnFs = h('button', { class: 'btn btn-sm', type: 'button', title: 'Layar penuh (F)', 'aria-pressed': 'false', onclick: () => toggleFullscreen() }, '⛶');
   const wrap = h('div', { class: 'office-wrap' }, canvas,
     h('div', { class: 'office-zoom' },
       h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Perbesar', title: 'Perbesar (+)', onclick: () => engine?.zoom(1.25) }, '+'),
       h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': 'Perkecil', title: 'Perkecil (−)', onclick: () => engine?.zoom(0.8) }, '−'),
       h('button', { class: 'btn btn-sm', type: 'button', title: 'Reset kamera: pas layar (0)', onclick: () => engine?.fit() }, 'Pas'),
-      btnMap, btnSound),
+      btnMap, btnSound, btnFs),
     tip, float, notes, minimap);
 
   const panel = h('aside', { class: 'office-panel card', 'aria-live': 'polite', hidden: true });
@@ -92,8 +98,40 @@ export async function render(root, [initial = 'hq'], ctx) {
   }
   const side = h('div', { class: 'office-side' }, h('div', { class: 'office-tabs' }, tabChat, tabInfo, tabStatus), chat.el, panel, roster);
   const legend = h('div', { class: 'legend' }, ['idle', 'resting', 'pending', 'thinking', 'working', 'meeting', 'completed', 'error'].map((k) =>
-    h('span', null, h('span', { class: 'dot', style: { background: STATE[k].color } }), `${STATE[k].label}${k === 'pending' ? ' (antre)' : ''}`)), h('span', null, '· WALKING: saat status berubah · Klik karakter, meja, atau ruangan untuk detail'));
-  const layout = h('div', { class: 'office-layout' }, h('div', { class: 'stack-sm', style: { minWidth: 0 } }, statusBar, wrap, legend), side);
+    h('span', null, h('span', { class: 'dot', style: { background: STATE[k].color } }), `${STATE[k].label}${k === 'pending' ? ' (antre)' : ''}`)), h('span', null, '· Tanpa tugas: ngobrol, ngopi, main game, berenang · OB = office boy (dekorasi) · Klik karakter, meja, atau ruangan untuk detail'));
+  const main = h('div', { class: 'stack-sm office-main', style: { minWidth: 0 } }, statusBar, wrap, legend);
+  const layout = h('div', { class: 'office-layout' }, main, side);
+  let pseudoFs = false;
+  const isFs = () => document.fullscreenElement === main || pseudoFs;
+  async function toggleFullscreen(force) {
+    const on = force ?? !isFs();
+    if (on && !isFs()) {
+      // Some embedded browsers never answer the request: give it a moment, then use the overlay instead.
+      let ok = false;
+      if (main.requestFullscreen && document.fullscreenEnabled !== false) {
+        try {
+          await Promise.race([main.requestFullscreen({ navigationUI: 'hide' }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 800))]);
+          ok = document.fullscreenElement === main;
+        } catch {
+          ok = false;
+        }
+      }
+      if (!ok) pseudoFs = true;
+    } else if (!on) {
+      pseudoFs = false;
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+    }
+    syncFullscreen();
+  }
+  function syncFullscreen() {
+    const on = isFs();
+    main.classList.toggle('is-fs', on);
+    main.classList.toggle('pseudo-fs', pseudoFs);
+    btnFs.setAttribute('aria-pressed', String(on));
+    btnFs.textContent = on ? '⛶ Keluar' : '⛶';
+    btnFs.title = on ? 'Keluar dari layar penuh (Esc)' : 'Layar penuh (F)';
+    if (engine) refit(60);
+  }
   // The office page uses the full window width (other pages keep their max width) and fits one screen,
   // so the animation gets all the width left of the side column.
   root.classList.add('view-full');
@@ -166,7 +204,7 @@ export async function render(root, [initial = 'hq'], ctx) {
 
   function updateStatusBar() {
     const now = new Date();
-    sb.clock.textContent = `${now.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} · ${now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · ${PERIOD[dayPeriod(now)]}`;
+    sb.clock.textContent = `${now.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} · ${now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · ${PERIOD[engine.period]}${wx.time !== 'auto' ? ' (manual)' : ''}`;
     const emps = data.employees.filter((e) => e.state !== 'off');
     sb.emp.textContent = fmtNum(emps.length);
     sb.working.textContent = fmtNum(emps.filter((e) => ACTIVE.has(e.state)).length);
@@ -221,6 +259,17 @@ export async function render(root, [initial = 'hq'], ctx) {
       tipKey = null;
       return;
     }
+    if (hv.type === 'npc') {
+      const n = hv.npc;
+      const key = `npc:${n.id}:${n.note}`;
+      if (key !== tipKey) {
+        tipKey = key;
+        mount(tip, h('div', { class: 'row', style: { gap: '6px' } }, h('b', null, `OB ${n.name}`), h('span', { class: 'state-chip', style: { '--c': '#7cc0e8' } }, 'OFFICE BOY')),
+          h('div', { class: 'small muted' }, 'Dekorasi, bukan karyawan AI'),
+          h('div', { class: 'small' }, n.note));
+      }
+      return placeTip(hv);
+    }
     const e = hv.employee;
     const st = hv.char?.state || e.state;
     const key = `${e.id}:${st}:${e.task?.id || ''}`;
@@ -228,8 +277,12 @@ export async function render(root, [initial = 'hq'], ctx) {
       tipKey = key;
       mount(tip, h('div', { class: 'row', style: { gap: '6px' } }, h('b', null, e.name), stateBadge(st)),
         h('div', { class: 'small muted' }, STATE[st]?.text || ''),
-        e.task && st !== 'idle' && st !== 'resting' ? h('div', { class: 'small' }, `${taskCode(e.task.id)} ${e.task.title}`) : null);
+        e.task && st !== 'idle' && st !== 'resting' ? h('div', { class: 'small' }, `${taskCode(e.task.id)} ${e.task.title}`) : null,
+        hv.char?.outing ? h('div', { class: 'small muted' }, BREAK[hv.char.outing.kind] || '') : null);
     }
+    placeTip(hv);
+  }
+  function placeTip(hv) {
     tip.hidden = false;
     const W = wrap.clientWidth;
     const H = wrap.clientHeight;
@@ -254,6 +307,10 @@ export async function render(root, [initial = 'hq'], ctx) {
     // Never show stale data as current: older than 3 hours counts as unavailable.
     if (!l || l.place !== wx.place.name || Date.now() - l.at > 3 * 3600 * 1000) return { kind: 'cerah', text: wxErr ? 'Tidak tersedia' : 'Memuat…' };
     return { kind: l.kind, text: `${l.label} ${l.temp}°C` };
+  }
+  function applyTime() {
+    engine.setTimeMode(wx.time);
+    if (data) updateStatusBar();
   }
   function applyWeather() {
     const w = weatherNow();
@@ -338,9 +395,21 @@ export async function render(root, [initial = 'hq'], ctx) {
         },
       }, l))),
     ];
+    const timeBtns = h('div', { class: 'row' }, Object.entries(TIMES).map(([k, l]) => h('button', {
+      class: `btn btn-sm ${wx.time === k ? 'btn-primary' : ''}`, type: 'button', 'aria-pressed': String(wx.time === k),
+      onclick: () => {
+        wx.time = k;
+        saveWeatherSettings(wx);
+        applyTime();
+        renderWeatherCard();
+      },
+    }, l)));
     mount(float, floatClose(), h('div', { class: 'stack-sm' },
       h('div', { class: 'room-head', style: { '--c': '#5fb2ec' } }, h('h3', null, 'Cuaca & waktu'),
-        h('div', { class: 'small muted' }, `${now.toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })} · ${PERIOD[dayPeriod(now)]} (jam browser)`)),
+        h('div', { class: 'small muted' }, `${now.toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })} · ditampilkan ${PERIOD[engine.period]} (${wx.time === 'auto' ? 'jam browser' : 'manual'})`)),
+      h('div', { class: 'small muted' }, 'Waktu di kantor (langit, matahari/bulan, lampu ruangan):'),
+      timeBtns,
+      h('div', { class: 'small muted', style: { marginTop: '4px' } }, 'Cuaca di halaman depan:'),
       h('div', { class: 'small' }, 'Ditampilkan: ', h('b', null, w.text)),
       h('div', { class: 'row' }, modeBtn('auto', 'Otomatis'), modeBtn('manual', 'Manual')),
       wx.mode === 'auto' ? auto : manual,
@@ -369,8 +438,10 @@ export async function render(root, [initial = 'hq'], ctx) {
     float.dataset.kind = target.kind;
     if (target.kind === 'employee') float.dataset.id = String(target.id);
     else delete float.dataset.id;
+    if (target.kind === 'npc') float.dataset.npc = target.id;
+    else delete float.dataset.npc;
     float.dataset.side = sx > wrap.clientWidth / 2 ? 'left' : 'right';
-    float.setAttribute('aria-label', floatRoom ? `Ruangan ${floatRoom.name}` : target.kind === 'weather' ? 'Cuaca dan waktu' : 'Informasi karyawan');
+    float.setAttribute('aria-label', floatRoom ? `Ruangan ${floatRoom.name}` : target.kind === 'weather' ? 'Cuaca dan waktu' : target.kind === 'npc' ? 'Office boy' : 'Informasi karyawan');
     float.hidden = false;
     float.scrollTop = 0;
     tip.hidden = true;
@@ -388,12 +459,13 @@ export async function render(root, [initial = 'hq'], ctx) {
   }
   const floatClose = () => h('button', { class: 'float-x float-close', type: 'button', 'aria-label': 'Tutup', onclick: closeFloat }, '×');
   const roomEnv = (room) => ({
-    data, scene: engine.scene, room, business: engine.scene.business || null, chars: engine.chars, ctx,
+    data, scene: engine.scene, room, business: engine.scene.business || null, chars: engine.chars, npcs: engine.npcs, ctx,
     shownState, stateBadge, selectEmployee: (id) => selectEmployee(id, true), switchTo, overview: () => loadOverview(), meetingPanel, businessSummary,
   });
   async function renderFloat() {
     if (float.hidden) return;
     if (float.dataset.kind === 'weather') return renderWeatherCard();
+    if (float.dataset.kind === 'npc') return renderNpcCard();
     const seq = ++floatSeq;
     floatAt = Date.now();
     if (floatRoom) {
@@ -422,6 +494,17 @@ export async function render(root, [initial = 'hq'], ctx) {
     } catch (e) {
       if (seq === floatSeq) mount(float, floatClose(), h('p', { class: 'form-error' }, e.message));
     }
+  }
+  // Office boy card: decoration only (no AI, no data); shows what he is doing right now.
+  function renderNpcCard() {
+    const n = engine.npcs.get(float.dataset.npc);
+    if (!n) return closeFloat();
+    mount(float, h('div', { class: 'stack-sm' },
+      h('div', { class: 'row', style: { alignItems: 'flex-start' } }, avatarCanvas(n.avatar, 2),
+        h('div', { class: 'grow' }, h('h3', null, n.name), h('div', { class: 'small muted' }, 'Office boy · dekorasi')),
+        h('button', { class: 'float-x', type: 'button', 'aria-label': 'Tutup', onclick: closeFloat }, '×')),
+      h('div', { class: 'small' }, 'Sedang: ', h('b', null, n.note)),
+      h('p', { class: 'small muted', style: { margin: 0 } }, 'Office boy hanya menghidupkan suasana kantor: membuat kopi di coffee corner lalu mengantarnya (diutamakan ke karyawan yang sedang bekerja), mengepel lantai, membersihkan kolam renang, dan menyiram tanaman. Bukan karyawan AI, tidak memakai AI, dan tidak menyimpan data apa pun.')));
   }
   function floatCard(d, cur, progress) {
     const e = d.employee;
@@ -465,6 +548,7 @@ export async function render(root, [initial = 'hq'], ctx) {
     // Clicks open a card inside the office (visible without scrolling); the Detail panel below keeps the summary.
     onSelect: (sel) => {
       if (sel?.type === 'employee' || sel?.type === 'desk') return selectEmployee(sel.id);
+      if (sel?.type === 'npc') return openFloat({ kind: 'npc', id: sel.id }, sel.sx);
       if (sel?.type === 'room') return openFloat({ kind: 'room', room: sel.room }, sel.sx);
       if (sel?.type === 'yard') return openFloat({ kind: 'weather' }, sel.sx);
       closeFloat();
@@ -474,7 +558,9 @@ export async function render(root, [initial = 'hq'], ctx) {
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) engine.setAmbient(false);
   engine.attachMinimap(minimap);
   // Wide screens: the canvas fills the viewport height next to the chat column (no empty space beside it).
+  engine.setTimeMode(wx.time);
   engine.maxHeight = () => {
+    if (isFs()) return Math.max(240, window.innerHeight - statusBar.offsetHeight - 26);
     if (window.innerWidth <= 1100) return Math.round(window.innerHeight * 0.72);
     const top = wrap.getBoundingClientRect().top + window.scrollY;
     return Math.max(360, Math.round(window.innerHeight - top - legend.offsetHeight - 28));
@@ -608,7 +694,7 @@ export async function render(root, [initial = 'hq'], ctx) {
       if (!quiet) mount(panel, h('p', { class: 'muted' }, 'Memuat…'));
       if (selection.type === 'room') {
         const node = await roomPanel({
-          data, scene: engine.scene, room: selection.room, business: engine.scene.business || null, chars: engine.chars, ctx,
+          data, scene: engine.scene, room: selection.room, business: engine.scene.business || null, chars: engine.chars, npcs: engine.npcs, ctx,
           shownState, stateBadge, selectEmployee: (id) => selectEmployee(id, true), switchTo, overview: () => loadOverview(), meetingPanel, businessSummary,
         });
         if (seq === panelSeq) mount(panel, back, node);
@@ -631,7 +717,7 @@ export async function render(root, [initial = 'hq'], ctx) {
     for (const e of data.employees.filter((x) => inHQ.has(x.id))) counts[shownState(e)] = (counts[shownState(e)] || 0) + 1;
     return h('div', { class: 'stack-sm' },
       h('h3', null, 'Kantor Pusat (Holding)'),
-      h('p', { class: 'small muted', style: { margin: 0 } }, 'Group CEO, Business Managers, dan Shared Services. Klik karakter, meja, atau ruangan untuk detail.'),
+      h('p', { class: 'small muted', style: { margin: 0 } }, 'Kantor startup: Group CEO, Business Managers, dan tim pusat di Open Space, plus lounge (coffee & game corner) dan kolam renang. Klik karakter, meja, atau ruangan untuk detail.'),
       h('div', { class: 'row' }, Object.entries(counts).map(([k, v]) => h('span', { class: 'pill' }, stateBadge(k), ` ${v}`))),
       data.queue.paused ? h('p', { class: 'small', style: { color: 'var(--warn)', margin: 0 } }, 'Antrean dijeda: tidak ada pekerjaan AI yang berjalan.') : null,
       h('h4', { class: 'small muted', style: { marginTop: '8px' } }, 'Kantor bisnis'),
@@ -753,8 +839,15 @@ export async function render(root, [initial = 'hq'], ctx) {
   document.addEventListener('visibilitychange', onVis);
   const onKey = (e) => {
     if (e.key === 'Escape' && !float.hidden) closeFloat();
+    else if (e.key === 'Escape' && pseudoFs) toggleFullscreen(false);
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '') || document.activeElement?.isContentEditable;
+    if ((e.key === 'f' || e.key === 'F') && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      toggleFullscreen();
+    }
   };
   document.addEventListener('keydown', onKey);
+  document.addEventListener('fullscreenchange', syncFullscreen);
   return () => {
     engine.stop();
     sound.destroy();
@@ -764,6 +857,8 @@ export async function render(root, [initial = 'hq'], ctx) {
     io.disconnect();
     document.removeEventListener('visibilitychange', onVis);
     document.removeEventListener('keydown', onKey);
+    document.removeEventListener('fullscreenchange', syncFullscreen);
+    if (document.fullscreenElement === main) document.exitFullscreen().catch(() => {});
     root.classList.remove('view-full');
   };
 }

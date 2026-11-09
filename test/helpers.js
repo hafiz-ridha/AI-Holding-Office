@@ -16,6 +16,13 @@ export async function setupEnv() {
   config.dbPath = path.join(dir, 'office.db');
   config.backupDir = path.join(dir, 'backups');
   config.adminPassword = process.env.ADMIN_PASSWORD;
+  // Tests never reach the internet: web research points at a local address that the SSRF guard rejects at once
+  // (tests of the research module start their own stand-in server and allow it explicitly).
+  config.webNewsRss = 'http://127.0.0.1:9/rss';
+  config.webSearchUrl = 'http://127.0.0.1:9/html';
+  config.webTrendsRss = 'http://127.0.0.1:9/trends';
+  config.webWikiApi = 'http://127.0.0.1:9/w/api.php';
+  config.webAllowPrivate = false;
   loadAppSecret({ warn() {} });
   const db = await import('../src/db/index.js');
   db.openDb(config.dbPath);

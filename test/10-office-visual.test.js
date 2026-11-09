@@ -65,9 +65,53 @@ function checkScene(scene) {
     const hit = scene.props.find((p) => lane.x < p.x + p.w && lane.x + lane.w > p.x && lane.y < p.y + p.h && lane.y + lane.h > p.y);
     assert.equal(hit, undefined, `${scene.id}: aisle at x=${s.aisleX} blocked by ${hit?.f}`);
   }
-  // Ambient objects come from real furniture (plants, clocks, racks, status panel) only.
-  for (const a of scene.ambient) assert.ok(['plant', 'clock', 'rack', 'panel'].includes(a.type));
+  // Ambient objects come from real furniture only (plants, clocks, racks, status panel, pool water, float ring,
+  // coffee steam, arcade screens).
+  for (const a of scene.ambient) assert.ok(['plant', 'clock', 'rack', 'panel', 'pool', 'float', 'steam', 'arcade'].includes(a.type), a.type);
+  // Office boys: spots they use lie inside a room.
+  const inRoom = (p) => scene.rooms.some((r) => p.x >= r.x * T && p.x < (r.x + r.w) * T && p.y >= r.y * T && p.y < (r.y + r.h) * T);
+  for (const k of ['coffee', 'station']) if (scene.spots[k]) assert.ok(inRoom(scene.spots[k]), `${scene.id}: ${k} spot inside a room`);
+  for (const p of scene.spots.pool) assert.ok(inRoom(p), `${scene.id}: pool spot inside a room`);
+  assert.ok(scene.npcs.length >= 1, `${scene.id}: office boys`);
+  assert.ok(!scene.rooms.some((r) => /shared services/i.test(r.name)), `${scene.id}: no "Shared Services" room`);
 }
+
+test('startup HQ: open space for the central team, lounge with coffee & game corner, pool, three office boys', () => {
+  const data = makeData({ businesses: 3, staffPerBiz: 2, extraShared: 2 });
+  const hq = buildHQScene(data, size);
+  const keys = hq.rooms.map((r) => r.key);
+  for (const k of ['ceo', 'meeting', 'bm', 'open', 'lounge', 'pool']) assert.ok(keys.includes(k), `room ${k}`);
+  for (const k of ['finance', 'reception', 'research', 'dev', 'hr', 'marketing', 'shared']) assert.ok(!keys.includes(k), `no department room ${k}`);
+  // Every central-team member (shared services + custom roles) has a desk in the Open Space, grouped by function.
+  const team = data.employees.filter((e) => e.org_unit === 'shared');
+  for (const e of team) assert.equal(hq.deskByOwner.get(e.id)?.room.key, 'open', `${e.role_key} sits in the Open Space`);
+  const order = hq.desks.filter((d) => d.room.key === 'open').map((d) => data.employees.find((e) => e.id === d.owner).role_key);
+  assert.equal(order[0], 'group_finance');
+  assert.ok(order.indexOf('developer') < order.indexOf('analyst'), 'custom roles after the known functions');
+  assert.ok(hq.desks.find((d) => data.employees.find((e) => e.id === d.owner).role_key === 'developer').monitors.length === 2, 'developers keep dual monitors');
+  // Lounge: coffee corner + game corner + sofas.
+  const lounge = hq.rooms.find((r) => r.key === 'lounge');
+  const inLounge = (p) => p.x >= lounge.x * T && p.x + p.w <= (lounge.x + lounge.w) * T && p.y >= lounge.y * T && p.y + p.h <= (lounge.y + lounge.h) * T;
+  const loungeProps = hq.props.filter(inLounge).map((p) => p.f);
+  for (const f of ['coffee_bar', 'bar_stool', 'pingpong', 'foosball', 'arcade', 'sofa_blue', 'ob_cart']) assert.ok(loungeProps.includes(f), `lounge has ${f}`);
+  // Pool: inside its room, nothing stands in the water, loungers and parasols on the deck.
+  const poolRoom = hq.rooms.find((r) => r.key === 'pool');
+  const q = hq.pool;
+  assert.ok(q && q.room === poolRoom);
+  assert.ok(q.x > poolRoom.x * T && q.x + q.w < (poolRoom.x + poolRoom.w) * T && q.y > (poolRoom.y + 2) * T && q.y + q.h < (poolRoom.y + poolRoom.h) * T);
+  for (const p of hq.props) assert.ok(!(p.x < q.x + q.w && p.x + p.w > q.x && p.y < q.y + q.h && p.y + p.h > q.y), `${p.f} not in the pool`);
+  const poolProps = hq.props.filter((p) => p.x >= poolRoom.x * T && p.x < (poolRoom.x + poolRoom.w) * T && p.y >= poolRoom.y * T).map((p) => p.f);
+  assert.ok(poolProps.filter((f) => f === 'lounger').length >= 2 && poolProps.includes('parasol'));
+  assert.equal(hq.spots.pool.length, 2);
+  assert.deepEqual(hq.npcs.map((n) => n.name), ['Ujang', 'Dedi', 'Bayu']);
+  assert.equal(hq.spots.station.room, lounge);
+  assert.equal(hq.spots.coffee.room, lounge);
+  // Business office: one office boy, coffee from the pantry machine, guest desks no longer labelled Shared Services.
+  const biz = buildBusinessScene(data, data.businesses[0], size);
+  assert.equal(biz.npcs.length, 1);
+  assert.equal(biz.spots.coffee.room.key, 'lounge');
+  assert.equal(biz.rooms.find((r) => r.key === 'guests').name, 'Hot Desk Tamu');
+});
 
 test('HQ and business offices have no overlapping objects (default holding)', () => {
   const data = makeData();
@@ -121,7 +165,9 @@ test('atlas contains every frame the scenes and renderer reference', () => {
   const data = makeData();
   const scenes = [buildHQScene(data, size), buildBusinessScene(data, data.businesses[0], size)];
   const names = new Set(['doormat', 'flag_pole', 'chair', 'exec_chair', 'chair_back_n', 'monitor_off', 'bub_rest', 'ico_ai', 'bub_meet', 'bub_wait', 'bub_check', 'bub_warn']);
-  for (const f of ['floor_wood', 'floor_wood_b', 'floor_tile', 'floor_carpet', 'floor_parquet', 'floor_dark', 'floor_warm', 'asphalt', 'paving', 'grass']) names.add(f);
+  for (const f of ['floor_wood', 'floor_wood_b', 'floor_tile', 'floor_carpet', 'floor_parquet', 'floor_dark', 'floor_warm', 'floor_concrete', 'floor_deck', 'floor_terrazzo', 'asphalt', 'paving', 'grass']) names.add(f);
+  // Drawn by the engine: pool water, float ring, office boys' items.
+  for (const f of ['pool_water', 'float_ring', 'ob_tray', 'ob_mop', 'ob_net', 'ob_can', 'wet_sign']) names.add(f);
   for (const i of [0, 1]) for (const f of ['monitor_on', 'monitor_term', 'ico_gear', 'sparkle']) names.add(`${f}_${i}`);
   for (const s of scenes) {
     for (const r of s.rooms) names.add(`wall_${r.wall}`).add(`wallwin_${r.wall}`);
