@@ -61,6 +61,11 @@ Semua pengaturan ini juga tersedia lewat tombol: kirim `/mybots`, pilih bot, lal
    **Zona waktu** (default `Asia/Jakarta`), lalu **Simpan**. Klik **Kirim laporan sekarang** untuk mencoba tanpa menunggu jam laporan.
 8. Atur notifikasi sesuai kebutuhan: tugas dimulai, selesai, gagal, serta system alert dan persetujuan owner.
    **Sertakan business task & subtugas** membuat notifikasi lebih ramai, jadi biarkan mati jika cukup ringkasan.
+   - Notifikasi ditulis seperti pesan chat: siapa yang berbicara (emoji orang sesuai pekerjaan, nama, jabatan), lalu
+     judul tugas, isi hasilnya, dan baris kecil model AI yang dipakai.
+   - Isi hasil selalu berupa teks yang enak dibaca. Jika AI membalas dalam format JSON, misalnya rencana CEO tanpa
+     daftar tugas, jawaban yang terpotong, atau error dari provider AI, isinya diubah menjadi paragraf dan daftar biasa.
+     Format Markdown (tebal, judul, daftar) tampil sebagai format Telegram.
 9. **Kirim laporan per bagian** (bawaan aktif): laporan panjang dikirim sebagai beberapa pesan pendek seperti orang
    mengetik, dengan status "mengetik…" di antaranya.
    - Urutannya: sapaan ("Selamat sore! 👋"), ringkasan grup, satu pesan per bisnis, Shared Services, lalu

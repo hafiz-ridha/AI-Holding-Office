@@ -340,3 +340,17 @@ team_title / report_thread_id`).
     dibuat ulang pada sinkronisasi berikutnya.
   - `task:started` untuk tugas obrolan menampilkan "mengetik…" di topik.
 - Laporan otomatis memakai `report_thread_id` (dari `/team` atau `/setchat` di dalam topik).
+
+### Teks natural (tanpa JSON untuk manusia)
+
+`src/lib/readable.js`: `readable()` mengubah JSON dari AI menjadi Markdown biasa (jawaban/ringkasan sebagai paragraf
+pembuka, field lain sebagai "Label: nilai" atau daftar). JSON yang terpotong diselamatkan dari nilai teksnya. Prosa dan
+kode di dalam prosa tidak diubah. `cleanError()` mengganti badan JSON di pesan error dengan pesannya.
+
+- Di sumber: orchestrator memakai `planAnswer()` untuk rencana CEO/Manager tanpa daftar tugas atau yang gagal diurai,
+  dan `readable()` untuk hasil kerja dan laporan sintesis (kecuali tugas meminta JSON). Error provider dibersihkan di
+  `providers/base.js`. Prompt kerja dan laporan meminta teks/Markdown, bukan JSON.
+- Di keluaran: obrolan dashboard (`holding/chat.js`), laporan data (`telegram/report.js`), notifikasi, dan topik tim
+  memakai `readable()`/`cleanError()`, jadi hasil lama yang tersimpan sebagai JSON juga tampil natural.
+- `src/telegram/format.js`: siapa yang berbicara (`speaker`, `personEmoji`), warna topik, dan `chatHtml()` (JSON →
+  teks → HTML Telegram). Notifikasi tugas ditulis seperti pesan chat: pembicara, judul, isi, lalu model sebagai footer.

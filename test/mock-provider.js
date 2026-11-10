@@ -91,6 +91,16 @@ export async function startMockProvider({ key = 'test-key', delayMs = 0 } = {}) 
       if (/SIMPLE_TASK/.test(lastUser) && /RENCANA_JSON/.test(lastUser)) {
         content = JSON.stringify({ analysis: 'Sederhana', direct_answer: 'Jawaban langsung dari CEO.', subtasks: [] });
       }
+      // Models that answer in JSON where people expect text (real cases seen with some providers).
+      if (/PLAN_NO_LIST/.test(lastUser) && /RENCANA_HOLDING_JSON/.test(lastUser)) {
+        content = JSON.stringify({ analysis: 'Owner menanyakan tren kopi minggu ini; cukup dijawab langsung.', direct_answer: null });
+      }
+      if (/PLAN_TRUNCATED/.test(lastUser) && /RENCANA_HOLDING_JSON/.test(lastUser)) {
+        content = '{"analysis": "Tren minggu ini", "direct_answer": "Tren kopi susu naik 20% dan pelanggan baru banyak datang dari Instagram, sehingga';
+      }
+      if (/JSON_REPLY/.test(lastUser) && !/RENCANA_/.test(lastUser)) {
+        content = '```json\n' + JSON.stringify({ reply: 'Halo owner, tren kopi susu gula aren sedang naik.', poin_penting: ['Kopi susu gula aren', 'Cold brew'], status: 'ok' }) + '\n```';
+      }
       return send(200, {
         model: m,
         choices: [{ message: { role: 'assistant', content }, finish_reason: 'stop' }],

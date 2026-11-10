@@ -410,5 +410,5 @@ src/            server.js, app.js, config.js, events.js
   cli/          reset-password.js
 public/         SPA tanpa build step (HTML + CSS + ES modules + Canvas); assets/office-atlas.png (sprite sheet)
 scripts/        deploy-aapanel.sh (install/update/backup di VPS aaPanel), build-office-atlas.mjs (generator sprite sheet PNG)
-test/           node:test (130 tes) + test/system (restart, beban, RAM)
+test/           node:test (136 tes) + test/system (restart, beban, RAM)
 ```

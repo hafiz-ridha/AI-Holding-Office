@@ -17,6 +17,7 @@ export function extractApprovalItems(text) {
     let detail = m[1].replace(/[*_`]/g, '').trim();
     // Label on its own line: take the next non-empty line as the detail.
     if (!detail && lines[i + 1]) detail = lines[i + 1].replace(/^[\s\-*•\d.]+/, '').replace(/[*_`]/g, '').trim();
+    detail = detail.replace(/["',\]}]+$/, '').trim(); // the line may come from JSON ("...": "PERLU ...",)
     if (detail && detail.length > 3 && !items.includes(detail)) items.push(truncate(detail, 400));
   }
   return items.slice(0, 5);

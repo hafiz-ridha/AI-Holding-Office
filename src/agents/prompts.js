@@ -111,7 +111,7 @@ Prioritas: ${PRIORITY_LABEL[task.priority] || 'normal'}
 Instruksi:
 ${truncate(task.description || task.title, 6000)}${ctx}${webBlock(web)}
 
-Kerjakan tugas ini sekarang dan berikan hasil akhir yang lengkap dan siap pakai. Jangan mengarang data; tulis "DATA NOT AVAILABLE" untuk data internal yang memang tidak ada, lalu tetap selesaikan dengan asumsi yang dinyatakan. Akhiri dengan bagian "Catatan untuk manager" (1-3 poin: asumsi, risiko, atau baris "PERLU PERSETUJUAN ADMIN: ..." hanya untuk tindakan penting).
+Kerjakan tugas ini sekarang dan berikan hasil akhir yang lengkap dan siap pakai, ditulis sebagai teks biasa/Markdown yang enak dibaca manusia (bukan JSON, kecuali tugas memintanya). Jangan mengarang data; tulis "DATA NOT AVAILABLE" untuk data internal yang memang tidak ada, lalu tetap selesaikan dengan asumsi yang dinyatakan. Akhiri dengan bagian "Catatan untuk manager" (1-3 poin: asumsi, risiko, atau baris "PERLU PERSETUJUAN ADMIN: ..." hanya untuk tindakan penting).
 
 ${APPROVAL_RULE}`;
   return [
@@ -149,7 +149,7 @@ Susun laporan bisnis untuk Group CEO dengan struktur:
 ## Peluang
 ## Rekomendasi
 ## Perlu Persetujuan Owner
-(tulis "Tidak ada" jika kosong; tandai data yang tidak ada dengan DATA NOT AVAILABLE)
+(tulis dalam Markdown biasa, bukan JSON; tulis "Tidak ada" jika kosong; tandai data yang tidak ada dengan DATA NOT AVAILABLE)
 
 ${APPROVAL_RULE}`;
   return [
@@ -176,7 +176,7 @@ Buat laporan konsolidasi holding untuk pemilik dengan struktur:
 ## Rekomendasi Keputusan
 ## Prioritas Berikutnya
 ## Perlu Perhatian Pemilik
-Jangan mengarang angka. Bisnis tanpa data ditandai DATA NOT AVAILABLE. Sebutkan tugas yang gagal.
+Tulis dalam Markdown biasa, bukan JSON. Jangan mengarang angka. Bisnis tanpa data ditandai DATA NOT AVAILABLE. Sebutkan tugas yang gagal.
 
 ${APPROVAL_RULE}`;
   return [

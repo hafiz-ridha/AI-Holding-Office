@@ -5,6 +5,8 @@ import { escapeHtml, truncate, splitMessage, naturalParts } from '../lib/text.js
 import { config } from '../config.js';
 import { getTelegramRow, getClient } from './settings.js';
 import { getEmployee } from '../agents/employees.js';
+import { cleanError } from '../lib/readable.js';
+import { speaker, chatHtml } from './format.js';
 
 const ALERT_THROTTLE_MS = 30 * 60_000;
 const lastAlert = new Map();
@@ -116,42 +118,41 @@ function ready(flag, task) {
   return true;
 }
 
-function bizName(task) {
-  if (!task?.business_id) return '';
-  const b = q.get('SELECT name FROM businesses WHERE id = ?', task.business_id);
-  return b ? ` [${escapeHtml(b.name)}]` : '';
+// Who is talking (person emoji in the character's skin tone, name, role), as in a chat.
+function who(task) {
+  const e = task?.employee_id ? getEmployee(task.employee_id) : null;
+  return e ? `${speaker(e)}\n` : '';
 }
 
 const code = (t) => `T-${String(t.id).padStart(5, '0')}`;
-const empName = (t) => {
-  const e = t.employee_id ? getEmployee(t.employee_id) : null;
-  return e ? `${e.name} (${e.role})` : '-';
-};
+// Small reference line under the title: task code and business.
+function ref(task) {
+  const b = task?.business_id ? q.get('SELECT name FROM businesses WHERE id = ?', task.business_id) : null;
+  return `<i>${code(task)}${b ? ` · ${escapeHtml(b.name)}` : ''}</i>`;
+}
 
 function onStarted({ task }) {
   if (!ready('notify_task_started', task)) return;
-  enqueue(
-    'task_started',
-    `▶️ <b>Tugas dimulai</b>${bizName(task)}\n<b>${code(task)}</b> ${escapeHtml(task.title)}\nPenanggung jawab: ${escapeHtml(empName(task))}`
-  );
+  enqueue('task_started', `${who(task)}▶️ Tugas dimulai: <b>${escapeHtml(task.title)}</b>\n${ref(task)}`);
 }
 
-// Why that model answered (stored by the AI router with the task), as one short italic line.
-function modelWhy(task) {
+// Which model answered (and why, as chosen by the AI router), as a small footer.
+function modelLine(task) {
   let c = null;
   try {
     c = task.model_choice ? JSON.parse(task.model_choice) : null;
   } catch {}
-  return c?.text ? `\n<i>${escapeHtml(truncate(c.text, 300))}</i>` : '';
+  const model = [task.provider_name, task.model_used].filter(Boolean).join(' / ');
+  if (!model) return '';
+  return `\n\n<i>Model: ${escapeHtml(model)}${c?.text ? ` — ${escapeHtml(truncate(c.text, 160))}` : ''}</i>`;
 }
 
 function onCompleted({ task }) {
   if (!ready('notify_task_completed', task)) return;
-  const summary = truncate(String(task.result || '').replace(/```[\s\S]*?```/g, '[kode]'), 1200);
+  const body = chatHtml(task.result, { max: 1500, code: '[kode]' });
   enqueue(
     'task_completed',
-    `✅ <b>Tugas selesai</b>${bizName(task)}\n<b>${code(task)}</b> ${escapeHtml(task.title)}\n` +
-      `Model: <code>${escapeHtml(task.provider_name || '-')} / ${escapeHtml(task.model_used || '-')}</code>${modelWhy(task)}\n\n${escapeHtml(summary)}`
+    `${who(task)}✅ Tugas selesai: <b>${escapeHtml(task.title)}</b>\n${ref(task)}${body ? `\n\n${body}` : ''}${modelLine(task)}`
   );
 }
 
@@ -159,7 +160,7 @@ function onFailed({ task, error }) {
   if (!ready('notify_task_failed', task)) return;
   enqueue(
     'task_failed',
-    `❌ <b>Tugas gagal</b>${bizName(task)}\n<b>${code(task)}</b> ${escapeHtml(task.title)}\nPenyebab: ${escapeHtml(truncate(error || task.error || '-', 800))}`
+    `${who(task)}❌ Tugas gagal: <b>${escapeHtml(task.title)}</b>\n${ref(task)}\n\nPenyebab: ${escapeHtml(truncate(cleanError(error || task.error || '-'), 600))}`
   );
 }
 
@@ -168,7 +169,7 @@ function onApproval({ task, ids, items }) {
   if (!ready('notify_system_alert')) return;
   enqueue(
     'approval',
-    `🔔 <b>Persetujuan owner dibutuhkan</b>${bizName(task)}\n<b>${code(task)}</b> ${escapeHtml(task.title)}\n` +
+    `${who(task)}🔔 <b>Persetujuan owner dibutuhkan</b> untuk ${escapeHtml(task.title)}\n${ref(task)}\n\n` +
       items.map((it, i) => `• #${ids[i] ?? '-'} ${escapeHtml(truncate(it, 300))}`).join('\n') +
       '\n\nPutuskan di dashboard → Approvals. AI tidak mengeksekusi tindakan apa pun.'
   );
@@ -179,7 +180,7 @@ function onAlert({ key, title, message }) {
   if (lastAlert.has(key) && t - lastAlert.get(key) < ALERT_THROTTLE_MS) return;
   lastAlert.set(key, t);
   if (!ready('notify_system_alert')) return;
-  enqueue('system_alert', `⚠️ <b>System Alert</b>\n<b>${escapeHtml(title)}</b>\n${escapeHtml(truncate(message, 1500))}`);
+  enqueue('system_alert', `⚠️ <b>System Alert</b>\n<b>${escapeHtml(title)}</b>\n${escapeHtml(truncate(cleanError(message), 1500))}`);
 }
 
 export function startNotifier(logger) {

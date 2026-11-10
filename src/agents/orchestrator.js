@@ -5,6 +5,7 @@ import { q, json } from '../db/index.js';
 import { getSetting } from '../lib/settings.js';
 import { extractJsonObject, estimateMessagesTokens, truncate } from '../lib/text.js';
 import { formatDateTime } from '../lib/time.js';
+import { readable, planAnswer } from '../lib/readable.js';
 import { routeChat, RouterError } from '../router/modelRouter.js';
 import { detectNeed, isChatReply } from '../router/modelSelector.js';
 import { recallKnowledge, formatKnowledge, addKnowledgeRefs, captureTask } from '../holding/knowledge.js';
@@ -127,10 +128,12 @@ async function planHolding(task, signal) {
   const plan = extractJsonObject(res.content);
   const hasLists = plan && (Array.isArray(plan.business_tasks) || Array.isArray(plan.shared_tasks) || Array.isArray(plan.subtasks));
   if (!plan || (!hasLists && !plan.direct_answer)) {
-    logTask(task.id, 'plan_unparsed', 'Rencana bukan JSON valid; jawaban Group CEO dipakai sebagai hasil', 'warn');
-    savePlan(task.id, { analysis: null, direct_answer: res.content, business_tasks: [], shared_tasks: [] });
-    memo(ceo, task, res.content, 2);
-    return finish(task, ceo, res.content, { report: 'holding' });
+    logTask(task.id, 'plan_unparsed', 'Rencana tanpa daftar tugas atau bukan JSON valid; jawaban Group CEO dipakai sebagai hasil', 'warn');
+    // Never hand the planning JSON to people: its answer/analysis (or what can be read of it) becomes the result.
+    const answer = plan ? planAnswer(plan, res.content) : readable(res.content);
+    savePlan(task.id, { analysis: plan?.analysis ?? null, direct_answer: answer, business_tasks: [], shared_tasks: [] });
+    memo(ceo, task, answer, 2);
+    return finish(task, ceo, answer, { report: 'holding' });
   }
 
   const bySlug = new Map(businesses.map((b) => [b.slug, b]));
@@ -179,7 +182,7 @@ async function planHolding(task, signal) {
   if (skipped.length) logTask(task.id, 'plan_skipped', skipped.join('; '), 'warn');
 
   if (!created.length) {
-    const answer = String(plan.direct_answer || plan.analysis || res.content);
+    const answer = planAnswer(plan, res.content);
     savePlan(task.id, { analysis: plan.analysis ?? null, direct_answer: answer, business_tasks: [], shared_tasks: [] });
     memo(ceo, task, answer, 2);
     return finish(task, ceo, answer, { report: 'holding' });
@@ -203,8 +206,9 @@ async function synthesizeHolding(task, signal) {
     ceo, task, analysis: json(task.plan, {})?.analysis, results: kids, budgetChars, tz: getSetting('timezone'),
   });
   const res = await callAI({ task, employee: ceo, messages, purpose: 'synthesis', signal });
-  memo(ceo, task, res.content, 2);
-  return finish(task, ceo, res.content, { report: 'holding' });
+  const content = readable(res.content);
+  memo(ceo, task, content, 2);
+  return finish(task, ceo, content, { report: 'holding' });
 }
 
 // ---------------- Level 2: Business Manager ----------------
@@ -230,7 +234,7 @@ async function planBusiness(task, signal) {
   const plan = extractJsonObject(res.content);
   const subtasks = maxSubtasks > 0 && Array.isArray(plan?.subtasks) ? plan.subtasks.filter((s) => s && (s.title || s.description)).slice(0, maxSubtasks) : [];
   if (!subtasks.length) {
-    const answer = plan ? String(plan.direct_answer || plan.analysis || res.content) : res.content;
+    const answer = plan ? planAnswer(plan, res.content) : readable(res.content);
     savePlan(task.id, { analysis: plan?.analysis ?? null, direct_answer: answer, subtasks: [] });
     memo(bm, task, answer, 2);
     return finish(task, bm, answer, { report: 'business' });
@@ -264,11 +268,13 @@ async function synthesizeBusiness(task, signal) {
     manager: bm, task, businessName: b?.name || '-', analysis: json(task.plan, {})?.analysis, results: kids, budgetChars, tz: getSetting('timezone'),
   });
   const res = await callAI({ task, employee: bm, messages, purpose: 'synthesis', signal });
-  memo(bm, task, res.content, 2);
-  return finish(task, bm, res.content, { report: 'business' });
+  const content = readable(res.content);
+  memo(bm, task, content, 2);
+  return finish(task, bm, content, { report: 'business' });
 }
 
 // ---------------- Level 3: employee ----------------
+const ASKS_JSON = /\bjson\b/i;
 async function runWork(task, signal) {
   const employee = getEmployee(task.employee_id);
   if (!employee) throw new Error('Karyawan untuk tugas ini tidak ditemukan');
@@ -299,9 +305,11 @@ async function runWork(task, signal) {
     web: await webFor(task),
   });
   const res = await callAI({ task, employee, messages, purpose: 'work', signal });
+  // Answers are for people: JSON becomes natural text, unless the owner asked for JSON.
+  const content = ASKS_JSON.test(`${task.title} ${task.description}`) ? res.content : readable(res.content);
   // Quick chat replies are conversation, not work: kept in the chat history only, not in working memory.
-  if (!isChatReply(task)) memo(employee, task, res.content);
-  return finish(task, employee, res.content);
+  if (!isChatReply(task)) memo(employee, task, content);
+  return finish(task, employee, content);
 }
 
 export async function executeTask(task, signal) {

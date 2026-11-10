@@ -1,5 +1,6 @@
 // OpenAI-compatible chat adapter. Shared by OpenRouter, 9Router, Groq, Gemini (OpenAI endpoint) and custom providers.
 import { stripThinking } from '../lib/text.js';
+import { cleanError } from '../lib/readable.js';
 
 export class ProviderError extends Error {
   // kind: auth | quota | rate_limit | not_found | bad_request | server | timeout | network | empty | unsupported | cancelled
@@ -111,10 +112,10 @@ export class OpenAICompatibleAdapter {
     if (data?.error) {
       if (typeof data.error === 'string') return data.error;
       const raw = data.error.metadata?.raw;
-      return [data.error.message, typeof raw === 'string' ? raw.slice(0, 200) : null].filter(Boolean).join(' — ');
+      return cleanError([data.error.message, typeof raw === 'string' ? raw.slice(0, 300) : null].filter(Boolean).join(' — '));
     }
-    if (data?.message) return data.message;
-    return String(text || '').slice(0, 200);
+    if (data?.message) return cleanError(data.message);
+    return cleanError(String(text || '').slice(0, 300)).slice(0, 200);
   }
 
   chatBody({ model, messages, maxTokens, temperature }) {

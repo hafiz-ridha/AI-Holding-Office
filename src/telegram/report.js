@@ -2,6 +2,7 @@
 import { q } from '../db/index.js';
 import { dayRange, displayDate, localDate } from '../lib/time.js';
 import { escapeHtml, truncate } from '../lib/text.js';
+import { readable, cleanError } from '../lib/readable.js';
 import { summary as financeSummary, monthRange, formatMoney } from '../holding/finance.js';
 
 const code = (id) => `T-${String(id).padStart(5, '0')}`;
@@ -15,7 +16,7 @@ export function section(text, heading) {
 
 export function plainSnippet(text, max) {
   return truncate(
-    String(text || '')
+    readable(text, { fences: true })
       .replace(/```[\s\S]*?```/g, '[kode]')
       .replace(/[#*_`>|]/g, '')
       .replace(/\n{2,}/g, '\n')
@@ -45,7 +46,7 @@ export function businessDayStats(biz, start, end) {
     ? reports.map((r) => `${truncate(r.title, 50)}: ${plainSnippet(section(r.content, 'Ringkasan') || r.content, 160)}`)
     : q.all("SELECT title FROM tasks WHERE business_id = ? AND status='completed' AND completed_at >= ? AND completed_at < ? AND kind != 'subtask' ORDER BY id DESC LIMIT 3", biz.id, start, end).map((t) => truncate(t.title, 80));
   const issues = [];
-  for (const f of failedToday) issues.push(`Gagal ${code(f.id)} ${truncate(f.title, 50)}: ${truncate(f.error || '', 80)}`);
+  for (const f of failedToday) issues.push(`Gagal ${code(f.id)} ${truncate(f.title, 50)}: ${truncate(cleanError(f.error || ''), 80)}`);
   for (const r of reports) {
     const m = section(r.content, 'Masalah');
     if (!isNone(m)) issues.push(plainSnippet(m, 160));

@@ -3,6 +3,7 @@
 import { q, now, json } from '../db/index.js';
 import { bus } from '../events.js';
 import { truncate } from '../lib/text.js';
+import { readable, cleanError } from '../lib/readable.js';
 import { getSetting } from '../lib/settings.js';
 import { getTask } from '../queue/tasks.js';
 import { getEmployee, getManager } from '../agents/employees.js';
@@ -200,7 +201,7 @@ const fromChat = (t) => String(t.created_by || '').startsWith(CHAT_PREFIX);
 const ownerOf = (t) => (fromChat(t) ? String(t.created_by).slice(CHAT_PREFIX.length) : 'Owner');
 
 function excerpt(text, max = 320) {
-  const s = String(text || '');
+  const s = readable(text, { fences: true });
   const m = s.match(/##\s*Ringkasan[^\n]*\n([\s\S]*?)(?=\n##\s|$)/i);
   return truncate((m ? m[1] : s).replace(/```[\s\S]*?```/g, '[kode]').trim(), max);
 }
@@ -242,7 +243,7 @@ function onCompleted({ task }) {
   const boss = parent ? emp(parent.employee_id) : null;
   if (!parent && fromChat(task) && task.kind === 'direct') {
     // Chat reply to the owner: the actual AI answer.
-    say(task, e, { recipientName: ownerOf(task), kind: 'message', content: truncate(task.result, MAX_REPLY) });
+    say(task, e, { recipientName: ownerOf(task), kind: 'message', content: truncate(readable(task.result, { fences: true }), MAX_REPLY) });
     return;
   }
   if (task.kind === 'subtask') {
@@ -259,11 +260,11 @@ function onFailed({ task, error }) {
   const e = emp(task.employee_id);
   const parent = task.parent_id ? getTask(task.parent_id) : null;
   const boss = parent ? emp(parent.employee_id) : null;
-  say(task, e, { recipientEmployeeId: boss?.id ?? null, recipientName: boss?.name ?? ownerOf(task), kind: 'fail', content: `Gagal: ${task.title}\n${truncate(error || task.error || '', 300)}` });
+  say(task, e, { recipientEmployeeId: boss?.id ?? null, recipientName: boss?.name ?? ownerOf(task), kind: 'fail', content: `Gagal: ${task.title}\n${truncate(cleanError(error || task.error || ''), 300)}` });
 }
 
 function onPostponed({ task, error }) {
-  postMessage({ businessId: task.business_id ?? null, senderType: 'system', senderName: 'Sistem', taskId: task.id, kind: 'system', content: `${code(task.id)} "${task.title}" ditunda karena AI belum tersedia; akan dicoba lagi otomatis. ${truncate(error || '', 200)}` });
+  postMessage({ businessId: task.business_id ?? null, senderType: 'system', senderName: 'Sistem', taskId: task.id, kind: 'system', content: `${code(task.id)} "${task.title}" ditunda karena AI belum tersedia; akan dicoba lagi otomatis. ${truncate(cleanError(error || ''), 200)}` });
 }
 
 function onApproval({ task, items }) {
