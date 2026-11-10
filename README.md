@@ -257,6 +257,16 @@ Panduan lengkap, termasuk pengaturan BotFather, grup/channel, keamanan token, da
 Menu perintah bot terisi otomatis, jadi `/setcommands` di BotFather tidak diperlukan. Panduan yang sama tersedia di
 halaman Telegram pada dashboard.
 
+**Grup tim (ngobrol langsung dengan setiap karyawan):** buat grup Telegram dengan **Topics** aktif, jadikan bot
+admin dengan izin *Kelola topik*, lalu kirim `/team` di grup itu.
+- Setiap karyawan AI dan Group CEO mendapat topik sendiri. Tulis di topik seseorang untuk bicara langsung dengannya:
+  `/tugas …` untuk tugas penuh, `/catat …` untuk catatan.
+- Balasannya diawali emoji orang sesuai pekerjaan dengan warna kulit karakter di kantor virtual, lalu nama dan
+  jabatannya. Contoh: 🧑🏽‍💻 **Dimas** · *Developer*.
+- Obrolan tersinkron dengan Obrolan di dashboard, dan laporan bisa masuk ke topik 📊 Laporan & Notifikasi.
+
+Detail: [docs/TELEGRAM.md](docs/TELEGRAM.md#5-grup-tim-satu-topik-per-karyawan-ngobrol-langsung).
+
 Perintah yang tersedia:
 
 | Perintah | Fungsi |
@@ -271,6 +281,7 @@ Perintah yang tersedia:
 | `/task <instruksi>` | Tugas ke Group CEO |
 | `/task @slug <instruksi>` | Tugas ke Business Manager bisnis tersebut |
 | `/setchat` | Jadikan chat ini (pribadi/grup) tujuan laporan & notifikasi otomatis |
+| `/team` | Di grup dengan Topics: satu topik per karyawan untuk ngobrol langsung (lihat di bawah) |
 | `/status`, `/today`, `/pause`, `/resume`, `/help` | Status, ringkasan hari ini, kontrol antrean |
 
 ## Kantor virtual (pixel art)
@@ -385,7 +396,7 @@ Lihat [docs/DEPLOY-AAPANEL.md](docs/DEPLOY-AAPANEL.md) bagian 8–10. Ringkasnya
 
 ```
 src/            server.js, app.js, config.js, events.js
-  db/           SQLite wrapper, migration runner, migrations/001–007 (*.sql), seed.js
+  db/           SQLite wrapper, migration runner, migrations/001–008 (*.sql), seed.js
   auth/ lib/    sesi, CSRF guard, crypto, zona waktu, settings, rate limit, audit
   providers/    adapter OpenAI-compatible, OpenRouter, 9Router, Cloudflare, Gemini + katalog preset
   router/       Model Router (pemilihan model otomatis, fallback, cooldown, kuota, concurrency)
@@ -393,11 +404,11 @@ src/            server.js, app.js, config.js, events.js
   agents/       karyawan, prompt, orchestrator holding → bisnis → karyawan
   research/     riset web otomatis untuk AI (Google News/Trends RSS, Wikipedia, DuckDuckGo; SSRF guard, cache)
   queue/        task queue berbasis SQLite + worker
-  telegram/     client, bot (long polling), notifier, laporan
+  telegram/     client, bot (long polling), notifier, laporan, grup tim (topik per karyawan)
   scheduler/    laporan harian, tugas berulang, backup, pembersihan
   routes/       REST API
   cli/          reset-password.js
 public/         SPA tanpa build step (HTML + CSS + ES modules + Canvas); assets/office-atlas.png (sprite sheet)
 scripts/        deploy-aapanel.sh (install/update/backup di VPS aaPanel), build-office-atlas.mjs (generator sprite sheet PNG)
-test/           node:test (124 tes) + test/system (restart, beban, RAM)
+test/           node:test (130 tes) + test/system (restart, beban, RAM)
 ```

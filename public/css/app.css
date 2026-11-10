@@ -367,6 +367,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .web-refs a { overflow-wrap: anywhere; }
 .cat-chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); vertical-align: 1px; }
 .cat-chip.imp { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+/* Telegram team group: topic per employee */
+.team-topics { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; }
+.team-topic { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); text-decoration: none; font-size: 13px; min-width: 0; }
+.team-topic:hover { border-color: var(--primary); }
+.team-topic.off { opacity: 0.55; }
+.team-topic .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-ico { font-size: 18px; line-height: 1; }
 /* Telegram: one-click fix when automatic sends fail */
 .tg-fix { border-color: var(--warn); background: var(--warn-soft); }
 /* Task Manager: recurring tasks */

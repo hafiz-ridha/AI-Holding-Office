@@ -29,6 +29,7 @@ export function explainTelegramError(message) {
   if (/bot was blocked by the user/i.test(m)) return `${m} — Buka bot di Telegram lalu tekan Restart/Unblock.`;
   if (/bot was kicked|bot is not a member/i.test(m)) return `${m} — Tambahkan bot lagi ke grup/channel, lalu kirim /setchat dari sana.`;
   if (/not enough rights|have no rights/i.test(m)) return `${m} — Jadikan bot admin dengan izin mengirim pesan.`;
+  if (/thread not found|TOPIC_DELETED|TOPIC_ID_INVALID/i.test(m)) return `${m} — Topik tujuan laporan sudah dihapus. Kirim /setchat di topik yang benar.`;
   return m;
 }
 
@@ -50,7 +51,8 @@ const pause = (ms) => new Promise((r) => setTimeout(r, Math.round(ms * (Number.i
  * and a short pause before each, unless switched off in the Telegram settings; very long parts are still split at
  * Telegram's length limit. opts.intro: an extra first message (e.g. a greeting). Throws on failure.
  */
-export async function sendText(chatId, html, client = getClient(), { natural = splitOn(), intro = null } = {}) {
+export async function sendText(chatId, html, client = getClient(), { natural = splitOn(), intro = null, threadId = null } = {}) {
+  const topic = threadId ? { message_thread_id: threadId } : {};
   if (!client) throw new Error('Bot token belum diatur');
   if (!chatId) throw new Error('Chat ID belum diatur. Kirim /setchat dari chat tujuan, atau isi Chat ID di dashboard → Telegram.');
   const parts = natural ? naturalParts(html) : splitMessage(html);
@@ -58,23 +60,23 @@ export async function sendText(chatId, html, client = getClient(), { natural = s
   const chatty = natural && parts.length > 1;
   for (const [i, part] of parts.entries()) {
     if (chatty) {
-      await client.call('sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => {});
+      await client.call('sendChatAction', { chat_id: chatId, action: 'typing', ...topic }).catch(() => {});
       await pause(Math.min(2400, 600 + part.length * 2.5));
     } else if (i > 0) await pause(1100); // stay under Telegram per-chat limits
     try {
-      await client.sendMessage(chatId, part);
+      await client.sendMessage(chatId, part, topic);
     } catch (e) {
       if (e.migrateTo) {
         // The group became a supergroup (new id): follow it, also for the configured report chat.
         q.run('UPDATE telegram_settings SET chat_id = ?, updated_at = ? WHERE id = 1 AND chat_id = ?', String(e.migrateTo), now(), String(chatId));
         chatId = e.migrateTo;
-        await client.sendMessage(chatId, part);
+        await client.sendMessage(chatId, part, topic);
       } else if (e.retryAfter) {
         await new Promise((r) => setTimeout(r, Math.min(e.retryAfter, 30) * 1000));
-        await client.sendMessage(chatId, part);
+        await client.sendMessage(chatId, part, topic);
       } else if (/can't parse entities/i.test(e.message)) {
         // Fallback: plain text if HTML formatting got broken by splitting.
-        await client.call('sendMessage', { chat_id: chatId, text: part.replace(/<[^>]+>/g, '') });
+        await client.call('sendMessage', { chat_id: chatId, text: part.replace(/<[^>]+>/g, ''), ...topic });
       } else {
         e.message = explainTelegramError(e.message);
         throw e;
@@ -95,7 +97,7 @@ async function drain() {
     const row = getTelegramRow();
     const chatId = row?.chat_id;
     try {
-      await sendText(chatId, item.html);
+      await sendText(chatId, item.html, undefined, { threadId: row?.report_thread_id });
       recordMessage({ type: item.type, chatId, status: 'sent', message: item.html });
     } catch (e) {
       recordMessage({ type: item.type, chatId, status: 'failed', message: item.html, error: e.message });

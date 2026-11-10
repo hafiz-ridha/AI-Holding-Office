@@ -9,6 +9,7 @@ import { worker } from './queue/worker.js';
 import { startScheduler, stopScheduler } from './scheduler/index.js';
 import { startNotifier, stopNotifier } from './telegram/notifier.js';
 import { bot } from './telegram/bot.js';
+import { startTeamBridge, stopTeamBridge } from './telegram/team.js';
 import { startChatFeed, stopChatFeed } from './holding/chat.js';
 import { bus } from './events.js';
 
@@ -24,6 +25,7 @@ await seed(log);
 if (!config.disableBackgroundJobs) {
   startNotifier(log);
   startChatFeed();
+  startTeamBridge();
   worker.start({ log, intervalMs: config.queueIntervalMs });
   startScheduler({ logger: log, intervalMs: config.schedulerIntervalMs });
   bot.start(log).catch((e) => log.warn(`Telegram bot tidak dapat dimulai: ${e.message}`));
@@ -45,6 +47,7 @@ async function shutdown(signal) {
     await worker.stop(10_000);
     stopNotifier();
     stopChatFeed();
+    stopTeamBridge();
     await app.close();
   } catch (e) {
     log.error({ err: e }, 'shutdown error');

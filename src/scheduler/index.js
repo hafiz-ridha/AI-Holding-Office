@@ -13,6 +13,7 @@ import { createBackup, pruneBackups } from '../services/backup.js';
 import { purgeExpiredSessions } from '../auth/sessions.js';
 import { bus } from '../events.js';
 import { runDueRecurring } from '../holding/recurring.js';
+import { maybeSyncTeam } from '../telegram/team.js';
 
 const MAX_REPORT_ATTEMPTS = 3;
 const RETRY_AFTER_MS = 5 * 60_000;
@@ -54,7 +55,7 @@ export async function runDailyReport({ force = false, at = Date.now() } = {}) {
   if (!id) return { skipped: 'already sent' };
   const { text } = buildHoldingReport(tz, at);
   try {
-    await sendText(row.chat_id, text, getClient(), { intro: row.split_messages !== 0 ? `${greeting(tz, at)} Ini laporan harian AI Virtual Holding.` : null });
+    await sendText(row.chat_id, text, getClient(), { intro: row.split_messages !== 0 ? `${greeting(tz, at)} Ini laporan harian AI Virtual Holding.` : null, threadId: row.report_thread_id });
     q.run("UPDATE telegram_reports SET status = 'sent', message = ?, error = NULL, updated_at = ? WHERE id = ?", text.slice(0, 4000), now(), id);
     log.info?.(`Laporan harian ${dateStr} terkirim`);
     return { sent: true, dateStr };
@@ -110,6 +111,7 @@ async function tick() {
   try {
     await runDailyReport();
     runDueRecurring();
+    maybeSyncTeam(); // new/renamed employees get their Telegram topic (runs in the background)
     runBackupIfDue();
     runCleanup();
   } catch (e) {

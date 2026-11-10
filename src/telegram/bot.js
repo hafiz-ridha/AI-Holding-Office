@@ -10,6 +10,8 @@ import { buildHoldingReport, buildBusinessReport, buildFinanceReport } from './r
 import { findBusiness } from '../holding/businesses.js';
 import { createOwnerTask } from '../holding/taskFactory.js';
 import { worker } from '../queue/worker.js';
+import { handleTopicMessage, linkTeam, syncTeamTopics, reportsTopic, topicByThread, REPORTS_TOPIC } from './team.js';
+import { getEmployee } from '../agents/employees.js';
 
 const COMMANDS = [
   ['overview', 'Ringkasan holding saat ini'],
@@ -20,7 +22,8 @@ const COMMANDS = [
   ['finance', 'Ringkasan keuangan bulan ini'],
   ['approvals', 'Persetujuan owner yang menunggu'],
   ['task', 'Buat tugas: /task <instruksi> atau /task @slug <instruksi>'],
-  ['setchat', 'Jadikan chat ini tujuan laporan & notifikasi otomatis'],
+  ['setchat', 'Jadikan chat ini (atau topik ini) tujuan laporan & notifikasi otomatis'],
+  ['team', 'Di grup dengan Topics: buat satu topik per karyawan untuk ngobrol langsung'],
   ['status', 'Status antrean & provider AI'],
   ['today', 'Ringkasan aktivitas hari ini'],
   ['pause', 'Jeda antrean tugas AI'],
@@ -109,14 +112,37 @@ function approvalsText() {
 }
 
 // Where automatic reports go, compared with the chat a command came from.
-function destinationLine(chatId) {
-  const dest = getTelegramRow()?.chat_id;
+function destinationLine(chatId, threadId = null) {
+  const row = getTelegramRow();
+  const dest = row?.chat_id;
   if (!dest) return 'Chat ID tujuan laporan otomatis belum diatur. Kirim /setchat untuk memakai chat ini.';
-  if (dest === String(chatId)) return '✅ Laporan & notifikasi otomatis dikirim ke chat ini.';
+  if (dest === String(chatId) && (row.report_thread_id ?? null) === (threadId ?? null)) return `✅ Laporan & notifikasi otomatis dikirim ke ${threadId ? 'topik' : 'chat'} ini.`;
+  if (dest === String(chatId)) return 'Laporan & notifikasi otomatis dikirim ke topik lain di grup ini. Kirim /setchat untuk memakai topik ini.';
   return `Laporan & notifikasi otomatis saat ini dikirim ke Chat ID <code>${escapeHtml(dest)}</code>. Kirim /setchat untuk memakai chat ini.`;
 }
 
-export async function handleCommand(text, from, chatId, tz, chat = null) {
+// /team: link this group, create the topics in the background, then report in the General topic.
+function setupTeam(chat, client) {
+  syncTeamTopics({ client }).then(async (r) => {
+    const row = getTelegramRow();
+    const rt = reportsTopic(chat.id);
+    let moved = false;
+    if (rt && (!row.chat_id || row.chat_id === String(chat.id))) {
+      await updateTelegramSettings({ chat_id: String(chat.id), report_thread_id: rt.thread_id }).then(() => (moved = true)).catch(() => {});
+    }
+    const text = [
+      `✅ <b>Grup tim siap</b>: ${r.created} topik dibuat${r.renamed ? `, ${r.renamed} diperbarui` : ''}.`,
+      'Tulis di topik seorang karyawan untuk bicara langsung dengannya (balasan cepat AI).',
+      '• <code>/tugas instruksi</code>: jadikan tugas penuh untuk karyawan itu',
+      '• <code>/catat teks</code>: catatan tanpa AI',
+      moved ? `Laporan & notifikasi otomatis sekarang masuk ke topik ${REPORTS_TOPIC}.` : `Kirim /setchat di topik ${REPORTS_TOPIC} untuk memindahkan laporan ke sana.`,
+      r.errors.length ? `⚠️ Sebagian gagal: ${escapeHtml(r.errors.slice(0, 3).join('; '))}` : '',
+    ].filter(Boolean).join('\n');
+    await sendText(chat.id, text, client, { natural: false }).catch(() => {});
+  }).catch(() => {});
+}
+
+export async function handleCommand(text, from, chatId, tz, chat = null, threadId = null) {
   const m = String(text || '').trim().match(/^\/([a-zA-Z_]+)(?:@\w+)?\s*([\s\S]*)$/);
   if (!m) return null;
   const cmd = m[1].toLowerCase();
@@ -130,15 +156,27 @@ export async function handleCommand(text, from, chatId, tz, chat = null) {
   rememberCommandChat(chat || { id: chatId }, from);
   switch (cmd) {
     case 'start':
-      return `Halo ${escapeHtml(from.first_name || '')}! Chat ID ini: <code>${chatId}</code>\n${destinationLine(chatId)}\n\n${helpText()}`;
+      return `Halo ${escapeHtml(from.first_name || '')}! Chat ID ini: <code>${chatId}</code>\n${destinationLine(chatId, threadId)}\n\n${helpText()}`;
     case 'setchat': {
+      const topic = threadId ? topicByThread(chatId, threadId) : null;
+      if (topic?.kind === 'employee') {
+        return `Topik ini untuk berbicara dengan ${escapeHtml(getEmployee(topic.employee_id)?.name || 'karyawan')}. Kirim /setchat di topik ${REPORTS_TOPIC} (atau topik lain) untuk laporan.`;
+      }
       try {
-        await updateTelegramSettings({ chat_id: String(chatId) });
+        await updateTelegramSettings({ chat_id: String(chatId), report_thread_id: threadId ?? null });
       } catch (e) {
         return `Gagal memakai chat ini: ${escapeHtml(e.message)}`;
       }
-      audit({ actor, action: 'telegram_chat_set', detail: { via: 'telegram', chat_id: String(chatId) } });
-      return `✅ Laporan harian & notifikasi otomatis sekarang dikirim ke chat ini${chat ? ` (${escapeHtml(chatLabel(chat))})` : ''}.\nChat ID: <code>${chatId}</code>`;
+      audit({ actor, action: 'telegram_chat_set', detail: { via: 'telegram', chat_id: String(chatId), thread_id: threadId ?? null } });
+      return `✅ Laporan harian & notifikasi otomatis sekarang dikirim ke ${threadId ? 'topik ini' : 'chat ini'}${chat ? ` (${escapeHtml(chatLabel(chat))})` : ''}.\nChat ID: <code>${chatId}</code>`;
+    }
+    case 'team': {
+      const r = await linkTeam(chat);
+      if (!r.ok) return r.error;
+      audit({ actor, action: 'telegram_team_linked', detail: { chat_id: String(chatId), title: chat?.title || null } });
+      setupTeam(chat, getClient());
+      const n = q.get('SELECT COUNT(*) n FROM employees WHERE enabled = 1').n;
+      return `⏳ Menyiapkan grup tim: topik untuk ${n} karyawan + ${REPORTS_TOPIC}. Saya kabari di sini setelah selesai.`;
     }
     case 'help':
       return helpText();
@@ -273,17 +311,25 @@ class Bot {
 
   async onUpdate(client, u) {
     const msg = u.message;
-    if (!msg?.text || !msg.text.startsWith('/')) return;
+    if (!msg?.text) return;
+    const thread = msg.is_topic_message ? msg.message_thread_id : null;
+    // Team group: a message in an employee's topic goes to that employee (answer comes back into the topic).
+    const topicReply = handleTopicMessage(msg);
+    if (topicReply !== null) {
+      if (topicReply) await sendText(msg.chat.id, topicReply, client, { threadId: thread, natural: false }).catch((e) => this.log.warn?.(`Telegram topik: ${e.message}`));
+      return;
+    }
+    if (!msg.text.startsWith('/')) return;
     const row = getTelegramRow();
     const tz = row?.timezone || 'Asia/Jakarta';
-    const reply = await handleCommand(msg.text, msg.from, msg.chat.id, tz, msg.chat);
+    const reply = await handleCommand(msg.text, msg.from, msg.chat.id, tz, msg.chat, thread);
     if (reply === undefined) {
       this.log.info?.(`Telegram: perintah dari user tidak diizinkan (${msg.from?.id}) diabaikan`);
       return;
     }
     if (!reply) return;
     try {
-      await sendText(msg.chat.id, reply, client);
+      await sendText(msg.chat.id, reply, client, { threadId: thread });
       recordMessage({ type: 'command', chatId: String(msg.chat.id), status: 'sent', message: `${msg.text.split(/\s/)[0]} → ${reply.slice(0, 200)}` });
     } catch (e) {
       recordMessage({ type: 'command', chatId: String(msg.chat.id), status: 'failed', message: msg.text, error: e.message });

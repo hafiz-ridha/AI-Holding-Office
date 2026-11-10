@@ -50,6 +50,8 @@ export function toPublic(row = getTelegramRow()) {
     notify_system_alert: Boolean(row.notify_system_alert),
     notify_subtasks: Boolean(row.notify_subtasks),
     split_messages: row.split_messages === undefined ? true : Boolean(row.split_messages),
+    report_thread_id: row.report_thread_id ?? null,
+    team_chat_id: row.team_chat_id ?? null,
     updated_at: row.updated_at,
   };
 }
@@ -126,6 +128,10 @@ export async function updateTelegramSettings(data) {
     if (c && (c !== row?.chat_id || newToken)) chat = await checkChat(c, newToken || getBotToken());
     sets.push('chat_id = ?');
     vals.push(c || null);
+    // Topic of a group with Topics (from /setchat inside a topic). A new chat without a topic: no topic.
+    const thread = 'report_thread_id' in data ? (Number.isInteger(data.report_thread_id) ? data.report_thread_id : null) : c === row?.chat_id ? row?.report_thread_id ?? null : null;
+    sets.push('report_thread_id = ?');
+    vals.push(thread);
   }
   if ('allowed_user_ids' in data) {
     const list = (Array.isArray(data.allowed_user_ids) ? data.allowed_user_ids : String(data.allowed_user_ids).split(/[\s,]+/))

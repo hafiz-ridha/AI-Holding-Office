@@ -88,7 +88,46 @@ tulis perintah dengan nama bot, misalnya `/overview@username_bot`.
 publik. Untuk channel privat, isi dengan ID `-100…`, yang terlihat di alamat Telegram Web
 (`web.telegram.org/a/#-100…`). Channel hanya menerima laporan. Perintah tetap dikirim lewat chat pribadi atau grup.
 
-## 5. Keamanan
+## 5. Grup tim: satu topik per karyawan (ngobrol langsung)
+
+Setiap karyawan AI dan Group CEO bisa diajak bicara langsung di Telegram. Caranya memakai grup dengan fitur **Topics**:
+setiap karyawan punya topik sendiri, ditambah satu topik **📊 Laporan & Notifikasi**. (*Channel* Telegram hanya bisa
+untuk siaran satu arah, jadi yang dipakai adalah grup.)
+
+1. Buat grup baru di Telegram, misalnya "AI Holding Team".
+2. Buka Info grup → **Edit** → aktifkan **Topics**.
+3. Tambahkan bot Anda ke grup, lalu jadikan **admin** dengan izin **Kelola topik** (*Manage topics*). Sebagai admin,
+   bot juga menerima pesan biasa di grup, jadi privacy mode tidak perlu diubah.
+4. Kirim `/team` di grup itu. Bot membuat satu topik per karyawan dan memindahkan laporan otomatis ke topik
+   📊 jika sebelumnya belum ada tujuan laporan atau tujuannya grup ini. Ringkasannya dikirim di topik General.
+
+Cara memakainya:
+
+| Di topik karyawan | Yang terjadi |
+|---|---|
+| Pesan biasa | Balasan cepat AI dari karyawan itu (satu panggilan AI), muncul di topik yang sama |
+| `/tugas <instruksi>` | Tugas penuh. Di topik Group CEO, CEO membagi ke bisnis/tim; Business Manager membuat business task; karyawan lain tugas langsung. Hasilnya dilaporkan di topik itu |
+| `/catat <teks>` | Catatan tanpa AI |
+| Perintah lain (`/report`, `/status`, …) | Dijawab di topik yang sama |
+
+- Setiap balasan diawali **emoji orang sesuai pekerjaan** dengan **warna kulit karakter** di kantor virtual,
+  lalu nama dan jabatan. Contoh: 🤵🏼 Group CEO, 🧑🏿‍💻 developer, 🧑🏽‍🔬 riset, 🧑🏼‍🎨 marketing, 💁🏻 sekretaris,
+  🧑🏼‍🍳 barista, 🧑🏼‍💼 keuangan/HR/sales. Warna ikon topik mengikuti warna baju karakter.
+- Semua pesan dikirim oleh satu bot, jadi foto profilnya sama untuk semua karyawan. Emoji dan nama yang menunjukkan
+  siapa yang berbicara.
+- Obrolan tersinkron dengan **Obrolan** di dashboard. Pesan Anda dari dashboard ke seorang karyawan ikut muncul di
+  topiknya (ditandai "dashboard"). Laporan, persetujuan, dan kegagalan tugas karyawan yang ditujukan ke owner juga
+  masuk ke topiknya.
+- Karyawan baru otomatis mendapat topik, dan nama topik ikut berubah jika nama/jabatan diubah. Jika sebuah topik
+  dihapus di Telegram, topik baru dibuat otomatis.
+- Pengaturan di dashboard → Telegram → kartu **Grup tim**: daftar topik (klik untuk membukanya di Telegram),
+  *Sinkronkan topik*, dan *Lepas grup*.
+- Hanya User ID yang diizinkan yang ditanggapi. Isolasi data antarbisnis tetap berlaku, dan tidak ada tindakan
+  berisiko yang dieksekusi.
+- Telegram membatasi sekitar 20 pesan per menit per grup, jadi pesan ke topik dikirim berurutan dengan jeda kecil.
+- Untuk memindahkan laporan ke topik lain, kirim `/setchat` di topik tersebut. `/setchat` di topik karyawan ditolak.
+
+## 6. Keamanan
 
 - **Token bocor?** Di BotFather kirim `/mybots`, pilih bot, pilih **API Token**, lalu **Revoke current token**. Token lama
   langsung mati. Tempel token baru di dashboard, lalu klik **Simpan**.
@@ -98,7 +137,7 @@ publik. Untuk channel privat, isi dengan ID `-100…`, yang terlihat di alamat T
 - **Satu token untuk satu server.** Jangan memakai token yang sama di laptop (pengembangan) dan VPS sekaligus, karena keduanya
   berebut pesan dan muncul error `409 Conflict`. Untuk uji coba, buat bot kedua di BotFather.
 
-## 6. Masalah umum
+## 7. Masalah umum
 
 | Gejala | Penyebab dan solusi |
 |---|---|
@@ -110,6 +149,8 @@ publik. Untuk channel privat, isi dengan ID `-100…`, yang terlihat di alamat T
 | Pesan tes gagal `chat not found` | Chat ID salah, Anda belum pernah menekan **Start** di bot (bot tidak bisa memulai chat duluan), atau bot belum dimasukkan ke grup. Kirim `/setchat` dari chat tujuan. |
 | Perintah seperti `/report` dibalas, tetapi laporan/notifikasi otomatis gagal `chat not found` | Balasan perintah dikirim ke chat asal perintah; laporan otomatis dikirim ke **Chat ID tujuan laporan** yang tersimpan, dan nilainya salah (sering: ID bot dari token, salah ketik, atau ID grup tanpa `-100`). Kirim `/setchat` dari chat tujuan, atau klik **Pakai chat ini sebagai tujuan** pada kartu peringatan di halaman Telegram. |
 | Grup diubah menjadi supergroup | ID grup berubah; aplikasi mengikuti ID baru secara otomatis saat mengirim. |
+| `/team` dibalas "Topics" atau "admin" | Aktifkan Topics di grup, dan jadikan bot admin dengan izin *Kelola topik*. |
+| Menulis di topik karyawan tetapi tidak dibalas | User ID Anda belum diizinkan, provider AI belum aktif, atau antrean dijeda. Lihat dashboard → Obrolan dan Task Manager. |
 | `bot was blocked by the user` | Buka bot di Telegram, lalu pilih **Unblock** atau **Restart**. |
 | `409 Conflict` | Token yang sama sedang dipakai server lain. Matikan instance lain atau buat bot baru. Webhook lama dihapus otomatis oleh aplikasi. |
 | Di grup bot tidak merespons | Tulis perintah dengan nama bot (`/overview@username_bot`), dan pastikan pengirim ada di daftar izin. |

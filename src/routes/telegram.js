@@ -5,6 +5,7 @@ import { buildHoldingReport, buildBusinessReport } from '../telegram/report.js';
 import { runDailyReport } from '../scheduler/index.js';
 import { findBusiness } from '../holding/businesses.js';
 import { bot, COMMANDS } from '../telegram/bot.js';
+import { teamInfo, syncTeamTopics, unlinkTeam } from '../telegram/team.js';
 import { auditReq } from '../lib/audit.js';
 import { body, str, bool, httpError } from './schemas.js';
 
@@ -35,7 +36,22 @@ export default async function telegramRoutes(app) {
     // offer a one-click fix when the configured Chat ID does not work.
     last_auto: q.get("SELECT status, chat_id, error, created_at FROM telegram_reports WHERE type != 'command' ORDER BY id DESC LIMIT 1") || null,
     last_command_chat: lastCommandChat(),
+    team: teamInfo(),
   }));
+
+  // Team group (topic per employee): create missing / rename changed topics now, or unlink the group.
+  app.post('/api/telegram/team/sync', async (req) => {
+    if (!getTelegramRow()?.team_chat_id) throw httpError('Belum ada grup tim. Kirim /team di grup Telegram dengan Topics aktif.');
+    const r = await syncTeamTopics();
+    auditReq(req, 'telegram_team_sync', null, { created: r.created, renamed: r.renamed, errors: r.errors.length });
+    return { ...r, team: teamInfo() };
+  });
+
+  app.delete('/api/telegram/team', async (req) => {
+    unlinkTeam();
+    auditReq(req, 'telegram_team_unlinked');
+    return { ok: true };
+  });
 
   app.put('/api/telegram', { schema: { body: body(fields) } }, async (req) => {
     const r = await updateTelegramSettings(req.body);
@@ -48,7 +64,7 @@ export default async function telegramRoutes(app) {
     const row = getTelegramRow();
     const text = '✅ <b>Tes AI Virtual Holding</b>\nKoneksi bot ke chat ini berhasil.';
     try {
-      await sendText(row.chat_id, text, getClient());
+      await sendText(row.chat_id, text, getClient(), { threadId: row.report_thread_id });
       recordMessage({ type: 'test', chatId: row.chat_id, status: 'sent', message: text });
       auditReq(req, 'telegram_test');
       return { ok: true };
@@ -84,7 +100,7 @@ export default async function telegramRoutes(app) {
       text = buildBusinessReport(b, tz).text;
     } else text = buildHoldingReport(tz).text;
     try {
-      await sendText(row.chat_id, text, getClient(), { intro: row.split_messages !== 0 ? `${greeting(tz)} Ini laporan terbaru yang Anda minta.` : null });
+      await sendText(row.chat_id, text, getClient(), { intro: row.split_messages !== 0 ? `${greeting(tz)} Ini laporan terbaru yang Anda minta.` : null, threadId: row.report_thread_id });
       recordMessage({ type: 'manual_report', chatId: row.chat_id, status: 'sent', message: text });
       auditReq(req, 'telegram_manual_report');
       return { ok: true };

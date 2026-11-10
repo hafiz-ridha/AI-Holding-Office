@@ -1,5 +1,6 @@
-import { get, post, put } from '../api.js';
-import { h, mount, badge, field, toast, errToast, fmtDate, emptyState } from '../ui.js';
+import { get, post, put, del } from '../api.js';
+import { h, mount, badge, field, toast, errToast, fmtDate, emptyState, confirmDialog } from '../ui.js';
+import { avatarCanvas } from '../office/sprites.js';
 
 const GUIDE_URL = 'https://github.com/hafiz-ridha/AI-Holding-Office/blob/main/docs/TELEGRAM.md';
 
@@ -38,6 +39,42 @@ function setupGuide(s, history, open, onToggle) {
       h('div', null, 'Menu perintah bot terisi otomatis, jadi ', kbd('/setcommands'), ' tidak perlu. Satu token hanya untuk satu server. ', ext(GUIDE_URL, 'Panduan lengkap ↗'))));
   el.addEventListener('toggle', () => onToggle(el.open));
   return el;
+}
+
+// Team group: one Telegram topic per AI employee (talk to each one directly), set up with /team in the group.
+function teamCard(d, s, btn, redraw) {
+  const t = d.team;
+  const botName = s.bot_username ? `@${s.bot_username}` : 'bot Anda';
+  if (!t) {
+    return h('details', { class: 'card' },
+      h('summary', null, h('strong', null, 'Grup tim: satu topik per karyawan'), h('span', { class: 'small muted' }, ' · ngobrol langsung dengan setiap karyawan AI dan Group CEO di Telegram')),
+      h('ol', { class: 'small', style: { margin: '10px 0 0', paddingLeft: '20px', display: 'grid', gap: '4px' } },
+        h('li', null, 'Buat grup baru di Telegram (mis. "AI Holding Team").'),
+        h('li', null, 'Info grup → Edit → aktifkan ', h('b', null, 'Topics'), '.'),
+        h('li', null, 'Tambahkan ', h('b', null, botName), ' ke grup dan jadikan ', h('b', null, 'admin'), ' dengan izin ', h('b', null, 'Kelola topik'), ' (Manage topics).'),
+        h('li', null, 'Kirim ', h('span', { class: 'kbd' }, '/team'), ' di grup itu. Bot membuat satu topik per karyawan + topik "📊 Laporan & Notifikasi".')),
+      h('p', { class: 'small muted', style: { margin: '8px 0 0' } }, 'Tulis di topik seorang karyawan untuk bicara langsung dengannya (balasan cepat AI, tersinkron dengan Obrolan di dashboard). /tugas … = tugas penuh, /catat … = catatan. Hanya User ID yang diizinkan yang ditanggapi; isolasi data antarbisnis tetap berlaku.'));
+  }
+  const staff = t.topics.filter((x) => x.kind === 'employee');
+  return h('div', { class: 'card stack-sm' },
+    h('div', { class: 'row-between' },
+      h('div', null, h('h3', { style: { margin: 0 } }, `Grup tim: ${t.title || t.chat_id}`),
+        h('div', { class: 'small muted' }, `${staff.length} topik karyawan${t.pending ? ` · ${t.pending} perlu disinkronkan` : ''}${t.syncing ? ' · sedang menyinkronkan…' : ''} · laporan ${t.reports_here ? 'masuk ke topik 📊' : 'dikirim ke tempat lain'}`)),
+      h('div', { class: 'row' },
+        btn('Sinkronkan topik', async () => {
+          const r = await post('/api/telegram/team/sync');
+          toast(`${r.created} topik dibuat, ${r.renamed} diperbarui${r.errors.length ? ` · ${r.errors[0]}` : ''}`, r.errors.length ? 'error' : 'ok');
+          redraw();
+        }, 'btn-sm'),
+        btn('Lepas grup', async () => {
+          if (!(await confirmDialog('Lepas grup tim? Topik di Telegram tetap ada, tetapi pesan di sana tidak diteruskan lagi ke karyawan.', { danger: true, okLabel: 'Lepas' }))) return;
+          await del('/api/telegram/team');
+          toast('Grup tim dilepas', 'ok');
+          redraw();
+        }, 'btn-sm btn-ghost btn-danger'))),
+    h('div', { class: 'team-topics' }, t.topics.map((x) => h('a', { class: `team-topic${x.enabled ? '' : ' off'}`, href: x.link, target: '_blank', rel: 'noopener noreferrer', title: 'Buka topik di Telegram' },
+      x.employee_id && x.avatar ? avatarCanvas(x.avatar, 1) : h('span', { class: 'team-ico', 'aria-hidden': 'true' }, x.employee_id ? x.icon : ''), h('span', { class: 'grow' }, x.name)))),
+    h('p', { class: 'small muted', style: { margin: 0 } }, 'Balasan ditandai emoji pekerjaan dengan warna kulit karakter di kantor virtual, nama, dan jabatan. Karyawan baru otomatis mendapat topik. /tugas … = tugas penuh, /catat … = catatan.'));
 }
 
 export async function render(root, _params, ctx) {
@@ -130,6 +167,7 @@ export async function render(root, _params, ctx) {
           h('div', { class: 'list' }, d.commands.map((c) => h('div', { class: 'list-item' }, h('span', { class: 'kbd' }, c.command), h('span', { class: 'small' }, c.description)))),
           h('p', { class: 'small muted' }, 'Perintah per bisnis bersifat dinamis: /business <slug>, /tasks <slug>, /report <slug>, /task @slug <instruksi>. Slug dapat dilihat dengan /companies atau di Business Directory.'),
           h('p', { class: 'small muted' }, `Laporan harian terakhir: ${d.today_report ? `${d.today_report.status} (${fmtDate(d.today_report.updated_at)}${d.today_report.error ? `, ${d.today_report.error}` : ''})` : 'belum ada'}. Laporan dikunci satu kali per tanggal sehingga tidak terkirim dua kali, juga setelah container restart.`))),
+      teamCard(d, s, btn, draw),
       h('div', { class: 'card card-flush' },
         h('div', { style: { padding: '12px 16px' } }, h('h3', null, 'Riwayat notifikasi')),
         history.length

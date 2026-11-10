@@ -82,6 +82,19 @@ export class TelegramClient {
     return this.call('getChat', { chat_id: chatId });
   }
 
+  getChatMember(chatId, userId) {
+    return this.call('getChatMember', { chat_id: chatId, user_id: userId });
+  }
+
+  // Forum topics (groups with Topics): one per AI employee.
+  createForumTopic(chatId, name, iconColor) {
+    return this.call('createForumTopic', { chat_id: chatId, name, ...(iconColor ? { icon_color: iconColor } : {}) });
+  }
+
+  editForumTopic(chatId, threadId, name) {
+    return this.call('editForumTopic', { chat_id: chatId, message_thread_id: threadId, name });
+  }
+
   deleteWebhook() {
     return this.call('deleteWebhook', { drop_pending_updates: false });
   }

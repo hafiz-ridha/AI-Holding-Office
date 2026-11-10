@@ -319,3 +319,24 @@ memanggil `runDueRecurring()`:
   - Dengan `approval_important_only` (default aktif), item yang tidak penting dicatat sebagai log tugas
     `approval_skipped`, bukan approval.
   - `GET /api/approvals` menyertakan `category`/`important` untuk antrean lama.
+
+### Telegram: grup tim (topik per karyawan)
+
+`src/telegram/team.js`, migrasi `008_telegram_team.sql` (`telegram_topics`, `telegram_settings.team_chat_id /
+team_title / report_thread_id`).
+
+- `/team` (`linkTeam`): memeriksa `is_forum` dan hak admin `can_manage_topics` (`getChatMember`).
+  `syncTeamTopics` membuat topik yang hilang (`createForumTopic`, warna ikon = warna baju karakter terdekat dari 6
+  warna Telegram) dan mengganti nama yang berubah (`editForumTopic`). Scheduler memanggil `maybeSyncTeam()`, yang
+  hanya menyinkronkan jika ada perubahan (cek DB).
+- Masuk: `bot.onUpdate` → `handleTopicMessage`. Pesan di topik karyawan dari User ID yang diizinkan →
+  `sendOwnerMessage` (mode reply / task `/tugas` / note `/catat`, kanal = bisnis yang dikelola/ditempati atau HQ).
+  Perintah lain dijawab di topik yang sama (`message_thread_id`).
+- Keluar: `startTeamBridge` mendengar `chat:message`.
+  - Jawaban, laporan, persetujuan, dan kegagalan karyawan yang ditujukan ke owner dikirim ke topiknya, dengan
+    `personEmoji` (emoji pekerjaan + warna kulit karakter), nama, dan jabatan. Markdown diubah ke HTML Telegram.
+  - Pesan owner dari dashboard dicerminkan. Pesan yang datang dari Telegram tidak digemakan balik.
+  - Antrean ±3 detik per pesan karena batas ±20 pesan/menit per grup. Topik yang dihapus di Telegram dilupakan, lalu
+    dibuat ulang pada sinkronisasi berikutnya.
+  - `task:started` untuk tugas obrolan menampilkan "mengetik…" di topik.
+- Laporan otomatis memakai `report_thread_id` (dari `/team` atau `/setchat` di dalam topik).

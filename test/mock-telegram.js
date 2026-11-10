@@ -6,7 +6,9 @@ export async function startMockTelegram({ token = '123456789:AAEhBOweik6ad9r_QXM
   const actions = []; // sendChatAction calls ("typing…")
   const updates = [];
   // unknownChats: chat ids the bot cannot reach ("chat not found"); migrate: { from, to } group -> supergroup.
-  const state = { failSend, unknownChats: new Set(), migrate: null };
+  const state = { failSend, unknownChats: new Set(), migrate: null, memberStatus: 'administrator', canManageTopics: true, deletedThreads: new Set() };
+  const topics = []; // forum topics created by the bot: { chat_id, message_thread_id, name, icon_color }
+  let nextThread = 100;
   const server = http.createServer(async (req, res) => {
     let body = '';
     for await (const c of req) body += c;
@@ -36,6 +38,10 @@ export async function startMockTelegram({ token = '123456789:AAEhBOweik6ad9r_QXM
           res.writeHead(400, { 'content-type': 'application/json' });
           return res.end(JSON.stringify({ ok: false, error_code: 400, description: 'Bad Request: group chat was upgraded to a supergroup chat', parameters: { migrate_to_chat_id: state.migrate.to } }));
         }
+        if (data.message_thread_id && state.deletedThreads.has(Number(data.message_thread_id))) {
+          res.writeHead(400, { 'content-type': 'application/json' });
+          return res.end(JSON.stringify({ ok: false, error_code: 400, description: 'Bad Request: message thread not found' }));
+        }
         if (state.unknownChats.has(String(data.chat_id))) {
           res.writeHead(400, { 'content-type': 'application/json' });
           return res.end(JSON.stringify({ ok: false, error_code: 400, description: 'Bad Request: chat not found' }));
@@ -46,6 +52,18 @@ export async function startMockTelegram({ token = '123456789:AAEhBOweik6ad9r_QXM
         }
         sent.push(data);
         return ok({ message_id: sent.length });
+      case 'createForumTopic': {
+        const t = { message_thread_id: nextThread++, name: data.name, icon_color: data.icon_color };
+        topics.push({ chat_id: data.chat_id, ...t });
+        return ok(t);
+      }
+      case 'editForumTopic': {
+        const t = topics.find((x) => x.message_thread_id === data.message_thread_id);
+        if (t) t.name = data.name;
+        return ok(true);
+      }
+      case 'getChatMember':
+        return ok({ status: state.memberStatus, can_manage_topics: state.canManageTopics, user: { id: data.user_id } });
       case 'sendChatAction':
         actions.push(data);
         return ok(true);
@@ -64,6 +82,7 @@ export async function startMockTelegram({ token = '123456789:AAEhBOweik6ad9r_QXM
     token,
     sent,
     actions,
+    topics,
     updates,
     state,
     close: () => new Promise((r) => server.close(r)),
