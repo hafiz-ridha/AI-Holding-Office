@@ -29,7 +29,7 @@ export async function runApprovedAction(id) {
     if (tool.connector && !isConnected(tool.connector)) throw new Error(`${PROVIDERS[tool.connector] || tool.connector} belum terhubung (dashboard → Koneksi)`);
     const v = validateArgs(tool, act.args);
     if (!v.ok) throw new Error(v.error);
-    const out = await tool.run({ task: task || { id: null, business_id: a.business_id }, employee, businessId: a.business_id ?? null, draft: '' }, v.args);
+    const out = await tool.run({ task: task || { id: null, business_id: a.business_id }, employee, businessId: a.business_id ?? null, draft: '', approvalId: a.id }, v.args);
     result = out.text || out.summary || 'Selesai';
     ok = true;
   } catch (e) {
@@ -40,4 +40,12 @@ export async function runApprovedAction(id) {
   const approval = getApproval(id);
   bus.emit('action:finished', { approval, ok, result, task, employee });
   return approval;
+}
+
+/** After a restart no action is running anymore: mark them failed so the owner can run them again. */
+export function recoverInterruptedActions() {
+  return q.run(
+    "UPDATE approvals SET action_status = 'failed', action_result = 'Terhenti karena aplikasi dimulai ulang. Klik Jalankan ulang.', action_at = ? WHERE action_status = 'running'",
+    now()
+  ).changes;
 }

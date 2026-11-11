@@ -123,6 +123,36 @@ export async function startMockProvider({ key = 'test-key', delayMs = 0 } = {}) 
       if (/AGENT_LOOP/.test(userText)) {
         content = finalAsked ? 'Selesai setelah batas langkah.' : '<tool_call>{"name": "catatan_cari", "args": {"query": "kopi"}}</tool_call>';
       }
+      // Developer building a website: create repo -> files (code blocks before the call) -> optional publish -> answer.
+      let finish = 'stop';
+      if (/AGENT_SITE/.test(userText)) {
+        const repo = (userText.match(/repo=([a-z0-9-]+)/) || [])[1] || 'toko-kopi-web';
+        if (/Menunggu persetujuan owner/.test(lastUser)) content = 'Website siap; penerbitan menunggu persetujuan owner.';
+        else if (/Hasil alat situs_terbitkan|situs_terbitkan gagal/.test(lastUser)) content = `Terbit: ${lastUser.slice(0, 300)}`;
+        else if (/Hasil alat github_simpan_file/.test(lastUser)) {
+          content = /AGENT_PUBLISH/.test(userText)
+            ? `<tool_call>{"name": "situs_terbitkan", "args": {"repo": "${repo}"${/HOST=(\w+)/.test(userText) ? `, "layanan": "${userText.match(/HOST=(\w+)/)[1]}"` : ''}}}</tool_call>`
+            : `Website selesai. ${(lastUser.match(/Pratinjau: \S+/) || [''])[0]}`;
+        } else if (/github_simpan_file gagal/.test(lastUser)) content = `Gagal menyimpan: ${lastUser.slice(0, 200)}`;
+        else if (/Hasil alat github_buat_repo/.test(lastUser) || /EXISTING/.test(userText)) {
+          content = 'Berikut halamannya.\n\nFile: index.html\n```html\n<!doctype html>\n<html lang="id"><head><link rel="stylesheet" href="style.css"></head>\n<body><h1>SITE_MARKER_HTML Toko Kopi</h1></body></html>\n```\n\n### style.css\n```css\nbody { font-family: sans-serif; color: #3b2a1a; }\n```\n\n'
+            + `<tool_call>{"name": "github_simpan_file", "args": {"repo": "${repo}", "pesan": "Halaman utama"}}</tool_call>`;
+        } else if (/github_buat_repo gagal/.test(lastUser)) content = `Gagal membuat repo: ${lastUser.slice(0, 200)}`;
+        else content = `<tool_call>{"name": "github_buat_repo", "args": {"nama": "${repo}", "jenis": "website", "deskripsi": "Website Toko Kopi"}}</tool_call>`;
+      }
+      // A file cut off by the output limit, then a shorter retry.
+      if (/AGENT_TRUNC/.test(userText)) {
+        if (/terpotong/.test(lastUser)) content = 'Saya tulis lebih pendek nanti.';
+        else {
+          content = 'File: index.html\n```html\n<!doctype html>\n<p>panjang sekali';
+          finish = 'length';
+        }
+      }
+      // Paths that must be refused.
+      if (/AGENT_BADPATH/.test(userText)) {
+        content = /github_simpan_file gagal/.test(lastUser) ? `Ditolak: ${lastUser.slice(0, 200)}`
+          : 'File: .github/workflows/deploy.yml\n```yaml\non: push\n```\n<tool_call>{"name": "github_simpan_file", "args": {"repo": "toko-kopi-web"}}</tool_call>';
+      }
       // Old habit: "DATA NOT AVAILABLE" in every section.
       if (/DNA_REPORT/.test(lastUser) && !/RENCANA_/.test(lastUser)) {
         content = '## Ringkasan\nPenjualan stabil. Omzet: DATA NOT AVAILABLE.\n\n## Hasil Utama\nDATA NOT AVAILABLE\n\n## Peluang\n- DATA NOT AVAILABLE\n\n## Rekomendasi\n- Uji paket bundling (estimasi harga pasar Rp25.000–35.000 [W1]).';
@@ -132,7 +162,7 @@ export async function startMockProvider({ key = 'test-key', delayMs = 0 } = {}) 
       }
       return send(200, {
         model: m,
-        choices: [{ message: { role: 'assistant', content }, finish_reason: 'stop' }],
+        choices: [{ message: { role: 'assistant', content }, finish_reason: finish }],
         usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
       });
     }

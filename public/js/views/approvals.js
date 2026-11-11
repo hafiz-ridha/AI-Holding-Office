@@ -2,7 +2,7 @@
 // approve/reject them in one go. Recommendations: the decision is only recorded. Actions an AI agent asked for
 // (e.g. share a Drive file): the server runs them after approval; their outcome is shown on the card.
 import { get, post } from '../api.js';
-import { h, mount, badge, fmtDate, select, modal, field, toast, emptyState, taskCode } from '../ui.js';
+import { h, mount, badge, fmtDate, select, modal, field, toast, emptyState, taskCode, linkify } from '../ui.js';
 
 const VERB = { approved: 'Setujui', rejected: 'Tolak' };
 const DONE = { approved: 'disetujui', rejected: 'ditolak' };
@@ -39,7 +39,7 @@ export async function render(root, _params, ctx) {
     const note = h('textarea', { rows: 3, maxlength: 500, placeholder: 'Catatan (opsional)' });
     modal({
       title: `${decision === 'approved' ? 'Setujui' : 'Tolak'} ${a.action ? 'aksi' : 'rekomendasi'}`,
-      body: h('div', { class: 'stack' }, h('p', null, a.detail), ...notices([a]), field('Catatan', note)),
+      body: h('div', { class: 'stack' }, h('p', null, linkify(a.detail)), ...notices([a]), field('Catatan', note)),
       actions: [{ label: 'Batal' }, {
         label: VERB[decision], kind: decision === 'approved' ? 'primary' : 'danger',
         onClick: async () => {
@@ -138,7 +138,7 @@ export async function render(root, _params, ctx) {
     if (!a.action) return null;
     const [label, tone] = ACTION_STATE[a.action_status] || ACTION_STATE.waiting;
     return h('div', { class: `action-line ${tone}` },
-      h('b', null, a.action_result ? `${label}: ` : label), a.action_result || null,
+      h('b', null, a.action_result ? `${label}: ` : label), a.action_result ? linkify(a.action_result) : null,
       a.action_status === 'failed' && a.status === 'approved'
         ? h('button', { class: 'btn btn-sm', type: 'button', onclick: async (ev) => {
           ev.target.disabled = true;
@@ -156,7 +156,7 @@ export async function render(root, _params, ctx) {
     a.status === 'pending' ? pick(a) : null,
     h('div', { class: 'grow', style: { minWidth: 0 } },
       h('div', { class: 'small muted' }, `#${a.id} · ${a.business_name || 'Holding'} · ${fmtDate(a.created_at)} · `, a.task_id ? h('a', { href: `#/task/${a.task_id}` }, `${taskCode(a.task_id)} ${a.title}`) : a.title),
-      h('p', { style: { margin: '6px 0 0' } }, h('span', { class: `cat-chip${a.important ? ' imp' : ''}`, title: a.important ? 'Tindakan penting: perlu keputusan owner' : 'Hanya informasi: tidak perlu persetujuan (dibuat sebelum aturan baru)' }, a.category), ' ', a.detail),
+      h('p', { style: { margin: '6px 0 0' } }, h('span', { class: `cat-chip${a.important ? ' imp' : ''}`, title: a.important ? 'Tindakan penting: perlu keputusan owner' : 'Hanya informasi: tidak perlu persetujuan (dibuat sebelum aturan baru)' }, a.category), ' ', linkify(a.detail)),
       actionLine(a),
       a.decided_at ? h('p', { class: 'small muted', style: { margin: '6px 0 0' } }, `Diputuskan ${a.decided_by} · ${fmtDate(a.decided_at)}${a.decision_note ? ` · ${a.decision_note}` : ''}`) : null),
     a.status === 'pending'
@@ -189,7 +189,7 @@ export async function render(root, _params, ctx) {
   scope.addEventListener('change', draw);
   mount(root, h('div', { class: 'stack' },
     h('div', { class: 'approvals-head' },
-      h('p', { class: 'muted', style: { margin: 0 } }, 'Hanya tindakan penting dari AI (uang, kontrak, SDM, harga, publikasi, hukum, data rahasia) dan aksi yang diminta karyawan AI (misalnya membagikan atau menghapus file Drive) yang menunggu keputusan di sini dan dikirim ke Telegram. Aksi baru dijalankan setelah Anda setujui.'),
+      h('p', { class: 'muted', style: { margin: 0 } }, 'Hanya tindakan penting dari AI (uang, kontrak, SDM, harga, publikasi, hukum, data rahasia) dan aksi yang diminta karyawan AI (misalnya menerbitkan website, membagikan atau menghapus file Drive) yang menunggu keputusan di sini dan dikirim ke Telegram. Aksi baru dijalankan setelah Anda setujui.'),
       h('div', { class: 'approvals-filters' }, scope, status)),
     bar,
     body));

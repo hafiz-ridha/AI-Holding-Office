@@ -2,6 +2,7 @@
 // Secrets go in, never out: responses only carry status, account, ids and hints. Every change is audited without
 // secret values.
 import * as google from '../connections/google.js';
+import { TOKEN_PROVIDERS, tokenPublic, connectToken, retestToken, disconnectToken } from '../connections/tokens.js';
 import { PROVIDERS, ConnectionError } from '../connections/store.js';
 import { listArtifacts, retryArtifact, getArtifact, KIND_LABEL } from '../connections/artifacts.js';
 import { runApprovedAction } from '../agents/actions.js';
@@ -22,8 +23,33 @@ async function guarded(fn) {
 export default async function connectionRoutes(app) {
   app.get('/api/connections', async () => ({
     google_drive: google.googlePublic(),
-    next: Object.entries(PROVIDERS).filter(([k]) => k !== 'google_drive').map(([provider, label]) => ({ provider, label })),
+    tokens: Object.keys(TOKEN_PROVIDERS).map(tokenPublic),
+    next: Object.entries(PROVIDERS).filter(([k]) => k !== 'google_drive' && !TOKEN_PROVIDERS[k]).map(([provider, label]) => ({ provider, label })),
   }));
+
+  // ---------------- services linked with a pasted token (GitHub, Vercel, Netlify, Cloudflare) ----------------
+  const tokenParams = { type: 'object', required: ['provider'], properties: { provider: { type: 'string', enum: Object.keys(TOKEN_PROVIDERS) } } };
+
+  // The token is tested before it is stored; an empty token keeps the stored one (only the other fields change).
+  app.put('/api/connections/token/:provider', {
+    schema: { params: tokenParams, body: body({ token: str(500), team_id: str(100), account_id: str(100) }) },
+  }, async (req) => guarded(async () => {
+    const out = await connectToken(req.params.provider, req.body);
+    auditReq(req, 'connection_updated', req.params.provider, { token_changed: Boolean(req.body.token), account: out.account });
+    return out;
+  }));
+
+  app.post('/api/connections/token/:provider/test', { schema: { params: tokenParams } }, async (req) => guarded(async () => {
+    const out = await retestToken(req.params.provider);
+    auditReq(req, 'connection_tested', req.params.provider);
+    return out;
+  }));
+
+  app.delete('/api/connections/token/:provider', { schema: { params: tokenParams } }, async (req) => {
+    const out = disconnectToken(req.params.provider);
+    auditReq(req, 'connection_removed', req.params.provider);
+    return out;
+  });
 
   app.put('/api/connections/google_drive', {
     schema: { body: body({ client_id: str(300, 10), client_secret: str(300) }, ['client_id']) },

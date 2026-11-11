@@ -18,6 +18,7 @@ const ROUTES = [
   { path: 'task', hidden: true, label: 'Detail Tugas', load: () => import('./views/task.js') },
   { path: 'employees', label: 'AI Employees', icon: '☺', load: () => import('./views/employees.js') },
   { path: 'files', label: 'File', icon: '🗀', load: () => import('./views/files.js') },
+  { path: 'sites', label: 'Website', icon: '◰', load: () => import('./views/sites.js') },
   { group: 'Konfigurasi' },
   { path: 'providers', label: 'AI Providers', icon: '⚡', load: () => import('./views/providers.js') },
   { path: 'telegram', label: 'Telegram', icon: '✈', load: () => import('./views/telegram.js') },

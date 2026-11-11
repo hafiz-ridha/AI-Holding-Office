@@ -1,15 +1,15 @@
-// Files the AI employees stored at outside services (Google Drive now): the index with links. The files themselves
+// Files the AI employees stored at outside services (Google Drive documents, GitHub repos): the index with links. The files themselves
 // live there; uploads that failed are retried automatically and can be retried here.
 import { get, post } from '../api.js';
 import { h, mount, select, toast, errToast, emptyState, fmtDate, taskCode } from '../ui.js';
 
 const STATUS = { synced: ['Tersimpan', 'b-completed'], pending: ['Menunggu unggah', 'b-pending'], failed: ['Gagal', 'b-failed'], trashed: ['Di Sampah', ''] };
-const PROVIDER = { google_drive: 'Google Drive', github: 'GitHub', vercel: 'Vercel', netlify: 'Netlify', supabase: 'Supabase' };
+const PROVIDER = { google_drive: 'Google Drive', github: 'GitHub', vercel: 'Vercel', netlify: 'Netlify', cloudflare: 'Cloudflare', supabase: 'Supabase' };
 
 export async function render(root) {
   const [businesses, conn] = await Promise.all([get('/api/businesses'), get('/api/connections')]);
   const scope = select([['', 'Semua bisnis'], ['hq', 'Holding (pusat)'], ...businesses.map((b) => [String(b.id), b.name])], '', { 'aria-label': 'Bisnis' });
-  const kind = select([['', 'Semua jenis'], ['document', 'Dokumen'], ['report', 'Laporan']], '', { 'aria-label': 'Jenis' });
+  const kind = select([['', 'Semua jenis'], ['document', 'Dokumen'], ['report', 'Laporan'], ['site', 'Website'], ['code', 'Kode']], '', { 'aria-label': 'Jenis' });
   const status = select([['', 'Semua status'], ['synced', 'Tersimpan'], ['pending', 'Menunggu unggah'], ['failed', 'Gagal'], ['trashed', 'Di Sampah']], '', { 'aria-label': 'Status' });
   const body = h('div');
 

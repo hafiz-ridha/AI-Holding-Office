@@ -11,7 +11,8 @@ import chat from './chat.js';
 import knowledge from './knowledge.js';
 import recurring from './recurring.js';
 import connections from './connections.js';
+import sites from './sites.js';
 
 export async function registerRoutes(app) {
-  for (const r of [health, auth, holding, businesses, tasks, employees, providers, telegram, settings, chat, knowledge, recurring, connections]) await app.register(r);
+  for (const r of [health, auth, holding, businesses, tasks, employees, providers, telegram, settings, chat, knowledge, recurring, connections, sites]) await app.register(r);
 }

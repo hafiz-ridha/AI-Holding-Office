@@ -1,6 +1,6 @@
 // Connections to outside services. Google Drive (personal Gmail) is linked with a device code: no domain or HTTPS
-// needed. Secrets are entered here but never shown again (only a hint). GitHub, Vercel, Netlify and Supabase follow
-// in the next stages.
+// needed. GitHub, Vercel, Netlify and Cloudflare (Pages) are linked with a token the owner pastes (tested before it is
+// stored). Secrets are entered here but never shown again (only a hint). Supabase follows in the next stage.
 import { get, post, put, del } from '../api.js';
 import { h, mount, field, toast, errToast, confirmDialog, fmtDate } from '../ui.js';
 
@@ -14,9 +14,6 @@ const STATUS = {
   disconnected: ['Belum terhubung', 'b-pending'],
 };
 const NEXT = {
-  github: 'Menyimpan kode program; juga jalur ke Cloudflare Pages & GitHub Pages.',
-  vercel: 'Menerbitkan website buatan karyawan AI.',
-  netlify: 'Menerbitkan website buatan karyawan AI.',
   supabase: 'Database gratis untuk website/aplikasi, dan penyimpanan gambar.',
 };
 
@@ -118,6 +115,117 @@ function driveCard(g, redraw) {
     h('div', { class: 'row' }, save, connect, g.status === 'connected' ? test : null, g.status === 'connected' || g.status === 'expired' ? off : null));
 }
 
+// ---------------- services linked with a pasted token ----------------
+const TOKEN_INFO = {
+  github: {
+    title: 'GitHub',
+    purpose: 'Kode & website buatan Developer (repo privat), serta jalur terbit ke GitHub Pages dan Cloudflare Pages',
+    placeholder: 'github_pat_… atau ghp_…',
+    steps: [
+      ['Buat token fine-grained.', ['Buka ', ext('https://github.com/settings/personal-access-tokens/new', 'GitHub → Fine-grained token baru ↗'), '. Nama: ', kbd('AI Office'), '. Expiration: bebas (boleh No expiration; bila kedaluwarsa, AI Office mengingatkan).']],
+      ['Pilih akses repo.', ['Repository access: ', h('strong', null, 'All repositories'), ' (perlu agar AI bisa membuat repo baru).']],
+      ['Beri izin.', ['Permissions → Repository: ', kbd('Administration'), ', ', kbd('Contents'), ', dan ', kbd('Pages'), ' masing-masing ', h('strong', null, 'Read and write'), '. Metadata otomatis read-only.']],
+      ['Tempel token di bawah.', ['Generate token, salin, tempel, lalu Hubungkan. Alternatif: token classic dengan scope ', kbd('repo'), '.']],
+    ],
+    notes: ['Repo dibuat privat. Karyawan AI hanya menyentuh repo yang dibuatnya sendiri, per bisnis.',
+      'Terbit ke GitHub Pages (akun gratis) mengharuskan repo publik: repo baru dijadikan publik saat Anda menyetujui terbit ke GitHub Pages.'],
+  },
+  vercel: {
+    title: 'Vercel',
+    purpose: 'Menerbitkan website (alamat <nama>.vercel.app)',
+    placeholder: 'Token Vercel',
+    steps: [
+      ['Buat token.', ['Buka ', ext('https://vercel.com/account/settings/tokens', 'Vercel → Tokens ↗'), ' → Create Token. Scope: akun pribadi (atau tim Anda). Expiration: bebas.']],
+      ['Tempel token di bawah.', ['Bila token untuk tim, isi juga Team ID (Settings tim → General, diawali ', kbd('team_'), ').']],
+    ],
+    notes: ['File website diunggah langsung dari repo GitHub saat Anda menyetujui terbit; tidak ada terbit otomatis tanpa izin.'],
+  },
+  netlify: {
+    title: 'Netlify',
+    purpose: 'Menerbitkan website (alamat <nama>.netlify.app)',
+    placeholder: 'Personal access token Netlify',
+    steps: [
+      ['Buat token.', ['Buka ', ext('https://app.netlify.com/user/applications#personal-access-tokens', 'Netlify → Applications → Personal access tokens ↗'), ' → New access token.']],
+      ['Tempel token di bawah.', ['Lalu Hubungkan.']],
+      ['Jadikan proyek publik.', ['Akun/tim Netlify baru membuat proyek privat secara default. Bila situs meminta login, buka pengaturan proyek atau tim di Netlify → Visibility, lalu pilih ', h('strong', null, 'Public'), '.']],
+    ],
+    notes: ['Batas Netlify: 3 penerbitan per menit, 100 per hari.'],
+  },
+  cloudflare: {
+    title: 'Cloudflare Pages',
+    purpose: 'Menerbitkan website (alamat <nama>.pages.dev) dari repo GitHub',
+    placeholder: 'API token Cloudflare',
+    steps: [
+      ['Hubungkan GitHub ke Cloudflare (sekali).', ['Buka ', ext('https://dash.cloudflare.com/', 'dashboard Cloudflare ↗'), ' → Workers & Pages → Create → Pages → Connect to Git → GitHub. Pasang app ',
+        h('strong', null, 'Cloudflare Workers and Pages'), ' untuk ', h('strong', null, 'All repositories'), '. Setelah daftar repo muncul, berhenti: proyek dibuat otomatis oleh AI Office.']],
+      ['Buat API token.', ['My Profile → API Tokens → Create Token → Custom token. Permissions: ', kbd('Account'), ' → ', kbd('Cloudflare Pages'), ' → ', kbd('Edit'), '.']],
+      ['Tempel token dan Account ID.', ['Account ID ada di halaman Workers & Pages (kolom kanan) atau Overview akun: 32 karakter.']],
+    ],
+    notes: ['Cloudflare Pages membangun situs dari branch cf-pages di repo GitHub. Jalur ini paling baru: coba dulu dengan satu website.'],
+  },
+};
+const TOKEN_FIELDS = {
+  vercel: [['team_id', 'Team ID (opsional)', 'team_…']],
+  cloudflare: [['account_id', 'Account ID', '32 karakter']],
+};
+
+function tokenCard(c, redraw) {
+  const info = TOKEN_INFO[c.provider];
+  const [label, cls] = c.status === 'expired' ? ['Perlu token baru', 'b-failed'] : STATUS[c.status] || STATUS.disconnected;
+  const token = h('input', { type: 'password', autocomplete: 'off', placeholder: c.has_token ? `Tersimpan (${c.token_hint || '••••'}). Kosongkan bila tidak diubah.` : info.placeholder });
+  const extra = (TOKEN_FIELDS[c.provider] || []).map(([key, title, ph]) => [key, title, h('input', { value: c[key] || '', placeholder: ph, autocomplete: 'off' })]);
+  const busy = (btn, fn) => async () => {
+    btn.disabled = true;
+    try {
+      await fn();
+    } catch (e) {
+      errToast(e);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+  const save = h('button', { class: 'btn btn-primary', type: 'button' }, c.has_token ? 'Simpan & tes' : 'Hubungkan');
+  save.onclick = busy(save, async () => {
+    const body = { ...(token.value.trim() ? { token: token.value.trim() } : {}) };
+    for (const [key, , el] of extra) body[key] = el.value.trim();
+    const r = await put(`/api/connections/token/${c.provider}`, body);
+    toast(`${info.title} terhubung${r.account ? `: ${r.account}` : ''}`, 'ok');
+    redraw();
+  });
+  const test = h('button', { class: 'btn', type: 'button' }, 'Tes koneksi');
+  test.onclick = busy(test, async () => {
+    const r = await post(`/api/connections/token/${c.provider}/test`);
+    toast(`${info.title} OK${r.account ? `: ${r.account}` : ''}`, 'ok');
+    redraw();
+  });
+  const off = h('button', { class: 'btn btn-danger', type: 'button' }, 'Putuskan');
+  off.onclick = busy(off, async () => {
+    if (!(await confirmDialog(`Putuskan ${info.title}? Token dihapus dari AI Office. Repo dan website yang sudah ada tidak terhapus.`, { okLabel: 'Putuskan', danger: true }))) return;
+    await del(`/api/connections/token/${c.provider}`);
+    toast(`${info.title} diputus`, 'ok');
+    redraw();
+  });
+  return h('div', { class: 'card stack' },
+    h('div', { class: 'row-between' },
+      h('div', null, h('h3', { style: { margin: 0 } }, info.title), h('div', { class: 'small muted' }, info.purpose)),
+      h('span', { class: `badge ${cls}` }, label)),
+    c.status === 'connected'
+      ? h('dl', { class: 'kv' },
+          h('dt', null, 'Akun'), h('dd', null, c.account || '-'),
+          c.token_type ? [h('dt', null, 'Jenis token'), h('dd', null, c.token_type)] : null,
+          h('dt', null, 'Terhubung sejak'), h('dd', null, c.connected_at ? fmtDate(c.connected_at) : '-'))
+      : null,
+    c.error ? h('div', { class: 'form-error' }, c.error) : null,
+    h('details', { open: !c.has_token },
+      h('summary', null, h('strong', null, `Cara mendapatkan token ${info.title}`)),
+      h('ol', { class: 'setup-steps' }, info.steps.map(([title, body]) => h('li', null, h('div', null, h('strong', null, title), h('div', { class: 'small muted' }, body))))),
+      h('div', { class: 'small muted setup-notes' }, info.notes.map((n) => h('div', null, n)))),
+    h('div', { class: 'form-grid' },
+      field('Token', token, 'Disimpan terenkripsi; tidak pernah ditampilkan lagi. Diuji ke layanannya sebelum disimpan.'),
+      extra.map(([, title, el]) => field(title, el))),
+    h('div', { class: 'row' }, save, c.status === 'connected' ? test : null, c.has_token ? off : null));
+}
+
 export async function render(root, _params, ctx) {
   const body = h('div', { class: 'stack' });
   const draw = async () => {
@@ -128,6 +236,9 @@ export async function render(root, _params, ctx) {
         'Kunci rahasia disimpan terenkripsi dan tidak pernah ditampilkan lagi.'),
       driveCard(d.google_drive, draw),
       guide(d.google_drive),
+      h('h3', { style: { margin: '8px 0 0' } }, 'Kode & website'),
+      h('p', { class: 'small muted', style: { margin: 0 } }, 'Developer menyimpan kode di GitHub, lalu website diterbitkan ke layanan yang Anda setujui. Layanan utama untuk terbit diatur di Settings → Website & kode.'),
+      h('div', { class: 'grid grid-2' }, d.tokens.map((c) => tokenCard(c, draw))),
       h('div', { class: 'grid-cards' }, d.next.map((n) => h('div', { class: 'card stack-sm next-conn' },
         h('div', { class: 'row-between' }, h('strong', null, n.label), h('span', { class: 'badge' }, 'Tahap berikutnya')),
         h('div', { class: 'small muted' }, NEXT[n.provider] || '')))));

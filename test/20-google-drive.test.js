@@ -46,7 +46,7 @@ test('client id/secret: validated, stored encrypted, never returned', async () =
   assert.ok(row.secret_enc.startsWith('v1:') && !row.secret_enc.includes(CLIENT_SECRET));
   const audit = q.get("SELECT detail FROM audit_logs WHERE action = 'connection_updated' ORDER BY id DESC LIMIT 1").detail;
   assert.ok(!audit.includes(CLIENT_SECRET));
-  assert.deepEqual(JSON.parse((await s.get('/api/connections')).body).next.map((n) => n.provider), ['github', 'vercel', 'netlify', 'supabase']);
+  assert.deepEqual(JSON.parse((await s.get('/api/connections')).body).next.map((n) => n.provider), ['supabase']);
   assert.deepEqual(driveTools(), [], 'no Drive tools before the account is linked');
 });
 

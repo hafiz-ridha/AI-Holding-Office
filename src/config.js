@@ -46,6 +46,13 @@ export const config = {
   // Google (Drive connection, OAuth device flow). Overridable for tests (local stand-ins).
   googleOAuthBase: (env.GOOGLE_OAUTH_BASE || 'https://oauth2.googleapis.com').replace(/\/+$/, ''),
   googleApiBase: (env.GOOGLE_API_BASE || 'https://www.googleapis.com').replace(/\/+$/, ''),
+  // Code and websites: GitHub (repositories) and hosting services. Overridable for tests (local stand-ins).
+  githubApiBase: (env.GITHUB_API_BASE || 'https://api.github.com').replace(/\/+$/, ''),
+  vercelApiBase: (env.VERCEL_API_BASE || 'https://api.vercel.com').replace(/\/+$/, ''),
+  netlifyApiBase: (env.NETLIFY_API_BASE || 'https://api.netlify.com').replace(/\/+$/, ''),
+  cloudflareApiBase: (env.CLOUDFLARE_API_BASE || 'https://api.cloudflare.com/client/v4').replace(/\/+$/, ''),
+  // Seconds between status checks while a site is being published (tests use 0).
+  deployPollMs: int(env.DEPLOY_POLL_MS, 3000),
   disableBackgroundJobs: bool(env.DISABLE_BACKGROUND_JOBS, false),
   queueIntervalMs: int(env.QUEUE_INTERVAL_MS, 5000),
   apiRateLimitPerMin: int(env.API_RATE_LIMIT_PER_MIN, 300),

@@ -26,10 +26,11 @@ import { autoSaveTask } from '../connections/artifacts.js';
 
 export class BudgetError extends Error {}
 
-function outputBudget(task, employee, messages, budget = getSetting('max_tokens_per_task')) {
+function outputBudget(task, employee, messages, budget = getSetting('max_tokens_per_task'), maxOutput = null) {
   const used = (task.tokens_in || 0) + (task.tokens_out || 0);
   const input = estimateMessagesTokens(messages);
-  const cap = employee?.max_tokens > 0 ? employee.max_tokens : getSetting('max_output_tokens');
+  // maxOutput: the agent's code mode (long files) asks for more output per reply than the usual cap.
+  const cap = maxOutput || (employee?.max_tokens > 0 ? employee.max_tokens : getSetting('max_output_tokens'));
   const remaining = budget - used - input;
   if (remaining < 200) {
     throw new BudgetError(`Batas token per pekerjaan (${budget}) tidak cukup: terpakai ${used}, input ±${input}.`);
@@ -37,7 +38,7 @@ function outputBudget(task, employee, messages, budget = getSetting('max_tokens_
   return Math.min(cap, remaining);
 }
 
-async function callAI({ task, employee, messages, purpose, signal, budget }) {
+async function callAI({ task, employee, messages, purpose, signal, budget, maxOutput }) {
   const need = detectNeed({ purpose, task, employee, inputTokens: estimateMessagesTokens(messages) });
   const res = await routeChat({
     messages,
@@ -45,7 +46,7 @@ async function callAI({ task, employee, messages, purpose, signal, budget }) {
     taskId: task.id,
     businessId: task.business_id ?? null,
     purpose,
-    maxTokens: outputBudget(task, employee, messages, budget),
+    maxTokens: outputBudget(task, employee, messages, budget, maxOutput),
     temperature: employee?.temperature ?? 0.7,
     signal,
     need,
@@ -316,7 +317,7 @@ async function runWork(task, signal) {
   const agentBudget = Math.max(getSetting('max_tokens_per_task'), getSetting('agent_max_tokens'));
   const agentAnswer = await runAgent({
     task, employee, messages, signal, budget: agentBudget,
-    call: (o) => callAI({ ...o, purpose: 'work', budget: agentBudget }),
+    call: (o) => callAI({ purpose: 'work', ...o, budget: o.budget || agentBudget }),
   });
   const raw = agentAnswer ?? (await callAI({ task, employee, messages, purpose: 'work', signal })).content;
   // Answers are for people: JSON becomes natural text, unless the owner asked for JSON.

@@ -387,3 +387,31 @@ layanan luar), dan kolom aksi di `approvals` (`action`, `action_status`, `action
 - **Aturan dasar karyawan**: `seed()` mengganti baris lama "tidak dapat mengeksekusi tindakan" sekali (flag
   `_tool_rule_v1`, hanya teks yang persis sama).
 - Tes: `test/mock-google.js` meniru OAuth & Drive v3; `config.googleOAuthBase` / `googleApiBase` diarahkan ke sana.
+
+### Kode & website (Tahap 2)
+
+Migrasi `010_sites.sql`: kolom `artifacts.meta` (JSON: `full_name`, `branch`, `head`, `preview_token`) dan tabel
+`deployments` (status terkini per situs per layanan: `project`, `url`, `status`, `commit_sha`, `approval_id`).
+
+- **Koneksi token** (`src/connections/tokens.js`, `http.js`): GitHub, Vercel, Netlify, Cloudflare. Token diuji
+  (`/user`, `/v2/user`, `/api/v1/user`, `/accounts/{id}/pages/projects`) sebelum disimpan; 401 saat dipakai → `expired`
+  + `system:alert`. Basis API bisa diganti lewat env (`GITHUB_API_BASE`, dst.) untuk tes.
+- **GitHub** (`src/connections/github.js`): repo privat `auto_init`, beberapa file dalam satu commit lewat Git Data API
+  (tree dengan `content` → commit → PATCH ref, ulang sekali bila bukan fast-forward), baca tree/blob/contents, branch
+  terbit, visibilitas, Pages.
+- **Alat Developer** (`src/agents/tools/github.js`, `allowed: role_key === 'developer'`, flag `code`): file diambil dari
+  blok kode bernama sebelum `<tool_call>` (`src/sites/files.js`: nama dari baris di atas atau info blok; path dibatasi,
+  `.git`/`.github` ditolak, 30 file / 300 KB / 1 MB). `situs_terbitkan` memakai hook async `prepare()` untuk memilih
+  layanan, mengunci SHA commit (argumen tersembunyi) dan menulis detail Approval dengan tautan pratinjau commit itu.
+- **Loop agen, mode kode**: bila ada alat `code`, batas `agent_code_max_steps` / `agent_code_max_tokens` /
+  `agent_code_max_output_tokens` (`callAI({ maxOutput })`). Hasil alat `compact` mengganti pesan asisten di riwayat
+  (kode tidak dikirim ulang). `finish_reason: length` tanpa panggilan alat utuh → minta balasan lebih pendek.
+- **Terbit** (`src/sites/hosts.js`, `src/sites/index.js` → `publishSite()`): Vercel (unggah `/v2/files` SHA1 →
+  `/v13/deployments` produksi → tunggu READY → alias produksi), Netlify (situs → deploy digest → unggah `required` → tunggu
+  `ready` → cek publik), GitHub Pages (repo publik → branch `gh-pages` → Pages legacy → tunggu build), Cloudflare Pages
+  (branch `cf-pages` → proyek Git → deployment → tunggu tahap `deploy`). Satu penerbitan per situs per layanan sekaligus.
+  Saat start, aksi `running` dan deployment `queued/building` menjadi gagal (bisa dijalankan ulang).
+- **Pratinjau** (`src/routes/sites.js`): `GET /preview/<token>/<branch|sha>/<path>` tanpa login, file dari contents API
+  GitHub (cache singkat, maks 4 MB), header `Content-Security-Policy: sandbox allow-scripts …` tanpa `allow-same-origin`
+  (origin unik, tidak bisa memakai sesi dashboard), `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex`, rate limit.
+- Tes: `test/mock-hosting.js` meniru GitHub, Vercel, Netlify, dan Cloudflare Pages.

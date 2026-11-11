@@ -29,8 +29,9 @@ Dokumentasi:
 | Telegram | Laporan harian holding (sekali per hari, tahan restart; dikirim per bagian seperti chat natural, dengan "mengetik…"), notifikasi tugas/error/persetujuan, perintah `/overview /companies /business <slug> /report /tasks /finance /approvals /task /setchat /pause /resume` |
 | Kantor virtual | Pixel art top-down orisinal: Kantor Pusat (CEO Office, Meeting Room, Business Managers, Finance, Secretary, Research, Developer, HR, Marketing, Lounge) + satu kantor per bisnis (otomatis dari database). State IDLE/THINKING/WORKING/WALKING/MEETING/COMPLETED/ERROR (+ RESTING dari riwayat tugas) mengikuti data tugas nyata; klik karakter, meja, atau ruangan untuk detail; status bar, notifikasi, siang/malam, minimap |
 | Riset web | Data terbaru dari internet (Google News, Google Trends, Wikipedia, DuckDuckGo) diberikan ke AI sebagai sumber bernomor, tanpa API key; approval owner hanya untuk tindakan penting |
-| Agen & alat | Karyawan AI bekerja seperti agen (ala OpenClaw): memakai alat dalam beberapa langkah (cari & baca web, Second Brain, Google Drive). Aksi aman langsung jalan; aksi penting (membagikan/menghapus file) menunggu persetujuan owner lalu dijalankan server |
-| File di layanan luar | Dokumen & laporan hasil kerja tersimpan sebagai Google Docs di Google Drive (Gmail pribadi, dihubungkan dengan kode perangkat); AI Office menyimpan daftar & tautannya (menu **File**). Tahap berikutnya: GitHub, Vercel/Netlify, Supabase |
+| Agen & alat | Karyawan AI bekerja seperti agen (ala OpenClaw): memakai alat dalam beberapa langkah (cari & baca web, Second Brain, Google Drive, GitHub). Aksi aman langsung jalan; aksi penting (menerbitkan website, membagikan/menghapus file) menunggu persetujuan owner lalu dijalankan server |
+| File di layanan luar | Dokumen & laporan hasil kerja tersimpan sebagai Google Docs di Google Drive (Gmail pribadi, dihubungkan dengan kode perangkat); kode & website buatan Developer di GitHub (repo privat). AI Office menyimpan daftar & tautannya (menu **File**). Tahap berikutnya: Supabase |
+| Website | Developer membuat website statis, pratinjau rahasia di AI Office, terbit ke Vercel, Netlify, Cloudflare Pages, atau GitHub Pages setelah disetujui (menu **Website**) |
 | Keamanan | Login scrypt, sesi HttpOnly, CSRF, rate limit, CSP ketat (koneksi keluar dari browser hanya ke Open-Meteo untuk cuaca otomatis), API key & token koneksi terenkripsi AES-256-GCM, whitelist Telegram, audit log, persetujuan owner untuk tindakan berisiko (satu per satu atau sekaligus); aksi agen yang penting hanya dijalankan setelah disetujui |
 
 ## Menjalankan secara lokal
@@ -203,6 +204,8 @@ Karyawan AI tidak hanya menulis teks: saat mengerjakan tugas, mereka bisa **mema
 | `drive_simpan_dokumen` | langsung | simpan/perbarui dokumen sebagai Google Docs di folder bisnisnya |
 | `drive_daftar`, `drive_baca` | langsung | lihat dan baca file AI Office milik bisnis itu |
 | `drive_bagikan`, `drive_hapus` | **setelah disetujui** | membagikan file (ke email atau siapa saja dengan tautan) dan memindahkannya ke Sampah |
+| `github_buat_repo`, `github_simpan_file`, `github_baca`, `github_daftar` | langsung (Developer) | repo privat baru, menyimpan beberapa file dalam satu commit, membaca dan mendaftar repo bisnis itu |
+| `situs_terbitkan` | **setelah disetujui** (Developer) | menerbitkan website ke Vercel, Netlify, Cloudflare Pages, atau GitHub Pages |
 
 - Protokolnya teks (`<tool_call>{…}</tool_call>`), jadi bekerja di semua model/provider, termasuk model gratis. Model yang
   tidak memakai alat tetap menjawab seperti biasa.
@@ -227,8 +230,32 @@ Karyawan AI tidak hanya menulis teks: saat mengerjakan tugas, mereka bisa **mema
   (maks. 5 kali) dan bisa diulang dari menu File.
 - Bila akses dicabut atau kedaluwarsa, status menjadi *Perlu dihubungkan ulang* dan Anda mendapat peringatan di Telegram.
 
-Tahap berikutnya memakai fondasi yang sama: GitHub (kode), website dengan pratinjau & terbit ke Vercel/Netlify (Cloudflare
-Pages & GitHub Pages lewat GitHub), lalu Supabase (database & gambar).
+**Website & kode (Developer)**: menu **Koneksi → Kode & website**. Setiap layanan dihubungkan dengan token yang Anda
+tempel; token diuji ke layanannya dulu, lalu disimpan terenkripsi. Panduan langkah demi langkah ada di kartunya.
+
+| Layanan | Yang dibutuhkan |
+|---|---|
+| GitHub (wajib) | Token fine-grained: *All repositories*, izin Administration, Contents, dan Pages *Read and write* (atau token classic scope `repo`) |
+| Vercel | Token dari Vercel → Tokens (Team ID bila memakai tim) |
+| Netlify | Personal access token; jadikan proyek **Public** bila akun Anda membuat proyek privat secara default |
+| Cloudflare Pages | Pasang GitHub App *Cloudflare Workers and Pages* (All repositories) sekali, token custom *Cloudflare Pages: Edit*, dan Account ID |
+| GitHub Pages | Tidak perlu token tambahan (memakai GitHub); repo dijadikan publik saat Anda menyetujui terbit ke sana |
+
+- Hanya **Developer** yang mendapat alat GitHub. Website dibuat statis (HTML, CSS, JavaScript tanpa build), satu-dua file
+  per balasan; kode yang sudah tersimpan tidak dikirim ulang ke AI (hemat token). Batas khusus Developer di
+  **Settings → Website & kode**: 12 langkah, 100.000 token per tugas, 8.000 token output per balasan.
+- Repo dibuat **privat** di akun GitHub Anda dan dicatat per bisnis; karyawan AI hanya menyentuh repo yang dibuatnya.
+  File di `.github/` (workflow) dan `.git/` ditolak.
+- **Pratinjau**: `/preview/<kode rahasia>/main/` di AI Office, tanpa login, dalam sandbox browser (skrip situs tidak bisa
+  memakai sesi dashboard). Isi `APP_URL` agar tautan pratinjau di Telegram lengkap.
+- **Terbit**: permintaan AI menjadi Approval berisi commit yang dikunci dan tautan pratinjau commit itu; yang terbit adalah
+  commit yang Anda lihat. Tanpa nama layanan, AI memakai **layanan utama** (Settings → Website & kode, default Vercel).
+  Vercel/Netlify menerima file langsung; GitHub Pages dan Cloudflare Pages membangun dari branch `gh-pages` / `cf-pages`.
+- Menu **Website** menampilkan setiap situs, pratinjau, alamat dan status per layanan, serta tombol **Terbitkan** untuk
+  Anda (langsung jalan, tercatat di audit log).
+- Cloudflare Pages memakai integrasi Git yang paling sedikit terdokumentasi: uji dulu dengan satu website.
+
+Tahap berikutnya memakai fondasi yang sama: Supabase (database & gambar).
 
 ## Persetujuan owner (Approvals)
 
@@ -237,8 +264,8 @@ penting: uang (transfer, pembelian, investasi, sewa), kontrak dan hukum (pajak, 
 harga atau diskon, publikasi atas nama perusahaan, menghapus atau membagikan data rahasia, dan operasional besar (buka/tutup
 cabang, ganti pemasok).
 - **Rekomendasi** dari hasil kerja AI: keputusan hanya dicatat; lakukan tindakannya sendiri bila disetujui.
-- **Aksi** yang diminta agen lewat alat (label *Aksi*): dijalankan server setelah disetujui; aksi yang gagal bisa
-  dijalankan ulang dari kartunya.
+- **Aksi** yang diminta agen lewat alat (label *Aksi*, misalnya menerbitkan website atau membagikan file): dijalankan
+  server setelah disetujui; aksi yang gagal (atau terhenti karena aplikasi dimulai ulang) bisa dijalankan ulang dari kartunya.
 
 - **Informasi biasa** (analisis, rekomendasi, draf, "untuk diketahui") dan **permintaan data** ("mohon admin menambahkan
   data …") tidak menjadi approval. Semua prompt AI melarang meminta owner mengisi data manual. AI diminta memakai data di
@@ -448,13 +475,14 @@ Lihat [docs/DEPLOY-AAPANEL.md](docs/DEPLOY-AAPANEL.md) bagian 8–10. Ringkasnya
 
 ```
 src/            server.js, app.js, config.js, events.js
-  db/           SQLite wrapper, migration runner, migrations/001–009 (*.sql), seed.js
+  db/           SQLite wrapper, migration runner, migrations/001–010 (*.sql), seed.js
   auth/ lib/    sesi, CSRF guard, crypto, zona waktu, settings, rate limit, audit
   providers/    adapter OpenAI-compatible, OpenRouter, 9Router, Cloudflare, Gemini + katalog preset
   router/       Model Router (pemilihan model otomatis, fallback, cooldown, kuota, concurrency)
   holding/      bisnis, dokumen/FTS, Second Brain (knowledge), keuangan, laporan, approval (hanya yang penting), tugas berulang, context (isolasi), task factory
   agents/       karyawan, prompt, orchestrator holding → bisnis → karyawan, loop agen + alat (tools/), aksi setelah persetujuan
-  connections/  koneksi layanan luar (rahasia terenkripsi), Google Drive (device flow, Docs), indeks file luar
+  connections/  koneksi layanan luar (rahasia terenkripsi), Google Drive (device flow, Docs), token GitHub/Vercel/Netlify/Cloudflare, klien GitHub, indeks file luar
+  sites/        website: file dari balasan AI, terbit ke Vercel/Netlify/GitHub Pages/Cloudflare Pages, status per layanan
   research/     riset web otomatis untuk AI (Google News/Trends RSS, Wikipedia, DuckDuckGo; SSRF guard, cache)
   queue/        task queue berbasis SQLite + worker
   telegram/     client, bot (long polling), notifier, laporan, grup tim (topik per karyawan)
@@ -463,5 +491,5 @@ src/            server.js, app.js, config.js, events.js
   cli/          reset-password.js
 public/         SPA tanpa build step (HTML + CSS + ES modules + Canvas); assets/office-atlas.png (sprite sheet)
 scripts/        deploy-aapanel.sh (install/update/backup di VPS aaPanel), build-office-atlas.mjs (generator sprite sheet PNG)
-test/           node:test (156 tes) + test/system (restart, beban, RAM)
+test/           node:test (170 tes) + test/system (restart, beban, RAM)
 ```

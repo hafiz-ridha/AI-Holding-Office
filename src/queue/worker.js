@@ -5,6 +5,8 @@ import { claimNext, failTask, postponeTask, logTask, recoverInterrupted, getTask
 import { executeTask, BudgetError } from '../agents/orchestrator.js';
 import { RouterError } from '../router/modelRouter.js';
 import { setEmployeeStatus, resetEmployeeStatuses } from '../agents/employees.js';
+import { recoverInterruptedActions } from '../agents/actions.js';
+import { recoverInterruptedPublishing } from '../sites/index.js';
 
 class Worker {
   constructor() {
@@ -26,6 +28,9 @@ class Worker {
     resetEmployeeStatuses();
     const n = recoverInterrupted();
     if (n) this.log.warn?.(`${n} tugas yang terputus dijadwalkan ulang`);
+    // Approved actions and site publications do not survive a restart: they become failed and can be run again.
+    const a = recoverInterruptedActions() + recoverInterruptedPublishing();
+    if (a) this.log.warn?.(`${a} aksi/penerbitan yang terputus ditandai gagal (bisa dijalankan ulang)`);
     bus.on('queue:wake', this.onWake);
     bus.on('task:cancelled', this.onCancel);
     this.timer = setInterval(() => this.tick(), intervalMs);

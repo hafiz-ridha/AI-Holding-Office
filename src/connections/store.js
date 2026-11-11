@@ -1,4 +1,4 @@
-// Connections to outside services (Google Drive now; GitHub, Vercel, Netlify, Supabase later): one row per provider.
+// Connections to outside services (Google Drive, GitHub, Vercel, Netlify, Cloudflare; Supabase later): one row per provider.
 // Secrets (client secret, refresh token, API tokens) are stored encrypted with APP_SECRET and never leave the server;
 // the dashboard only sees status, account and a hint.
 import { q, now, json } from '../db/index.js';
@@ -10,6 +10,7 @@ export const PROVIDERS = {
   github: 'GitHub',
   vercel: 'Vercel',
   netlify: 'Netlify',
+  cloudflare: 'Cloudflare Pages',
   supabase: 'Supabase',
 };
 

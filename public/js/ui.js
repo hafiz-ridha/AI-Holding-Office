@@ -172,7 +172,8 @@ export function emptyState(text, action) {
 // ---------- safe markdown ----------
 function inline(text) {
   const frag = document.createDocumentFragment();
-  const re = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|\[[^\]]+\]\((https?:\/\/[^)\s]+)\)|https?:\/\/[^\s<>()]*[^\s<>().,;:!?'"])/g;
+  // Links: Markdown links, plain URLs, and site preview paths of this app (/preview/<token>/...).
+  const re = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|\[[^\]]+\]\(((?:https?:\/\/|\/preview\/)[^)\s]+)\)|https?:\/\/[^\s<>()]*[^\s<>().,;:!?'"]|(?<![\w/])\/preview\/[A-Za-z0-9_-]{20,64}\/[^\s<>()]*[^\s<>().,;:!?'"])/g;
   let last = 0;
   let m;
   while ((m = re.exec(text))) {
@@ -183,13 +184,16 @@ function inline(text) {
     else if (t.startsWith('[')) {
       const label = t.slice(1, t.indexOf(']'));
       frag.append(h('a', { href: m[2], target: '_blank', rel: 'noopener noreferrer nofollow' }, label));
-    } else if (/^https?:\/\//.test(t)) frag.append(h('a', { href: t, target: '_blank', rel: 'noopener noreferrer nofollow' }, t));
+    } else if (/^(https?:\/\/|\/preview\/)/.test(t)) frag.append(h('a', { href: t, target: '_blank', rel: 'noopener noreferrer nofollow' }, t));
     else frag.append(h('em', null, t.slice(1, -1)));
     last = m.index + t.length;
   }
   if (last < text.length) frag.append(text.slice(last));
   return frag;
 }
+
+/** Plain text with clickable links (URLs and preview paths), e.g. approval details. */
+export const linkify = (text) => inline(String(text ?? ''));
 
 export function md(src) {
   const root = h('div', { class: 'md' });

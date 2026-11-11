@@ -2,22 +2,15 @@
 // only touch files in the index (artifacts) of the task's own business (HQ = no business): no cross-business access.
 import { q } from '../../db/index.js';
 import { truncate } from '../../lib/text.js';
-import { saveDocument, markTrashed } from '../../connections/artifacts.js';
+import { saveDocument, markTrashed, findBusinessArtifact } from '../../connections/artifacts.js';
 import * as google from '../../connections/google.js';
 
 const ROLE = { pembaca: 'reader', komentator: 'commenter', editor: 'writer' };
 
-/** A file of this business by index id ("12" / "#12"), link, or exact title. */
+/** A Drive file of this business by index id ("12" / "#12"), link, or exact title. */
 function findFile(ctx, ref) {
-  const r = String(ref || '').trim();
-  const id = r.match(/^#?(\d+)$/)?.[1];
-  const rows = q.all(
-    "SELECT * FROM artifacts WHERE provider = 'google_drive' AND business_id IS ? AND status != 'trashed' ORDER BY id DESC LIMIT 500",
-    ctx.businessId ?? null
-  );
-  const a = id ? rows.find((x) => x.id === Number(id))
-    : rows.find((x) => x.url === r || (x.external_id && r.includes(x.external_id))) || rows.find((x) => x.title.toLowerCase() === r.toLowerCase());
-  if (!a) throw new Error(`File "${truncate(r, 80)}" tidak ditemukan di file bisnis ini. Pakai drive_daftar untuk melihat nomornya.`);
+  const a = findBusinessArtifact(ctx.businessId, 'google_drive', ref);
+  if (!a) throw new Error(`File "${truncate(String(ref || ''), 80)}" tidak ditemukan di file bisnis ini. Pakai drive_daftar untuk melihat nomornya.`);
   if (!a.external_id) throw new Error(`File #${a.id} belum tersimpan di Drive (status ${a.status}).`);
   return a;
 }

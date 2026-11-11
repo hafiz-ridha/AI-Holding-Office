@@ -14,6 +14,28 @@ export const KIND_LABEL = { document: 'Dokumen', report: 'Laporan', code: 'Kode'
 
 export const getArtifact = (id) => q.get('SELECT * FROM artifacts WHERE id = ?', id) || null;
 
+/**
+ * A file of one business (HQ = null) at one provider, by index number ("12" / "#12"), link, external id
+ * (e.g. "owner/repo"), exact title, or repo name. null when there is none: tools never reach other businesses' files.
+ */
+export function findBusinessArtifact(businessId, provider, ref) {
+  const r = String(ref || '').trim();
+  if (!r) return null;
+  const rows = q.all(
+    "SELECT * FROM artifacts WHERE provider = ? AND business_id IS ? AND status != 'trashed' ORDER BY id DESC LIMIT 500",
+    provider, businessId ?? null
+  );
+  const id = r.match(/^#?(\d+)$/)?.[1];
+  if (id) return rows.find((x) => x.id === Number(id)) || null;
+  const low = r.toLowerCase().replace(/\/+$/, '');
+  const ext = (x) => String(x.external_id || '').toLowerCase();
+  return rows.find((x) => x.url && x.url.toLowerCase().replace(/\/+$/, '') === low)
+    || rows.find((x) => ext(x) && (ext(x) === low || low.includes(ext(x))))
+    || rows.find((x) => x.title.toLowerCase() === low)
+    || rows.find((x) => ext(x).endsWith(`/${low}`))
+    || null;
+}
+
 function businessFolderName(businessId) {
   if (!businessId) return 'Holding (HQ)';
   return q.get('SELECT name FROM businesses WHERE id = ?', businessId)?.name || `Bisnis ${businessId}`;
@@ -134,7 +156,7 @@ export function markTrashed(id) {
   q.run("UPDATE artifacts SET status = 'trashed', updated_at = ? WHERE id = ?", now(), id);
 }
 
-const SELECT = `SELECT a.id, a.provider, a.kind, a.title, a.url, a.status, a.source, a.error, a.attempts, a.business_id, a.task_id,
+const SELECT = `SELECT a.id, a.provider, a.kind, a.title, a.url, a.external_id, a.status, a.source, a.error, a.attempts, a.business_id, a.task_id,
   a.employee_id, a.created_at, a.updated_at, b.name AS business_name, e.name AS employee_name, t.title AS task_title
   FROM artifacts a LEFT JOIN businesses b ON b.id = a.business_id LEFT JOIN employees e ON e.id = a.employee_id
   LEFT JOIN tasks t ON t.id = a.task_id`;

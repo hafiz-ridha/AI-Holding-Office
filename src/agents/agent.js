@@ -86,48 +86,74 @@ async function execute(call, ctx) {
   if (!v.ok) return { error: v.error };
   if (tool.risk === 'important') {
     let detail;
+    let args = v.args;
     try {
-      detail = tool.describe ? tool.describe(ctx, v.args) : `${tool.name}: ${argSummary(v.args)}`;
+      if (tool.prepare) {
+        const p = await tool.prepare({ ...ctx, draft: call.before }, v.args);
+        detail = p.detail;
+        args = p.args || args;
+      } else {
+        detail = tool.describe ? await tool.describe(ctx, v.args) : `${tool.name}: ${argSummary(v.args)}`;
+      }
     } catch (e) {
+      if (ctx.signal?.aborted) throw e;
       return { error: e.message };
     }
-    const ap = createActionApproval({ task: ctx.task, employee: ctx.employee, businessId: ctx.businessId, tool: tool.name, args: v.args, detail });
+    const ap = createActionApproval({ task: ctx.task, employee: ctx.employee, businessId: ctx.businessId, tool: tool.name, args, detail });
     return { text: `Menunggu persetujuan owner (#${ap.id}): ${detail}. Lanjutkan pekerjaanmu tanpa menunggu hasilnya.`, summary: `menunggu persetujuan owner #${ap.id}` };
   }
   try {
     return await tool.run({ ...ctx, draft: call.before }, v.args);
   } catch (e) {
     if (ctx.signal?.aborted) throw e;
-    return { error: e.message };
+    return { error: e.message, compact: e.compact || null };
   }
 }
+
+const TRUNCATED = 'Balasanmu terpotong karena melebihi batas panjang satu balasan, jadi tidak ada yang disimpan. Tulis ulang lebih pendek: satu file per balasan, dan pecah file besar (CSS/JavaScript terpisah, atau bagian halaman di file lain).';
+const isTruncated = (res) => ['length', 'max_tokens', 'MAX_TOKENS'].includes(res?.finishReason);
 
 /**
  * Runs the task as an agent. Returns the final answer text, or null when the agent mode is off or no tool is
  * available (the caller then makes the usual single call).
- * call({ task, employee, messages, signal }) -> AI response; budget = token budget of the whole task.
+ * call({ task, employee, messages, signal, budget, maxOutput }) -> AI response; budget = token budget of the whole task.
  */
 export async function runAgent({ task, employee, messages, signal, call, budget }) {
   if (!getSetting('agent_enabled')) return null;
   const tools = toolsFor(employee, task);
   if (!tools.length) return null;
-  const maxSteps = isChatReply(task) ? Math.min(3, getSetting('agent_max_steps')) : getSetting('agent_max_steps');
+  // Code mode (Developer with GitHub): files are long and need more steps, tokens and output per reply.
+  const code = tools.some((t) => t.code);
+  const maxSteps = code
+    ? getSetting('agent_code_max_steps')
+    : isChatReply(task) ? Math.min(3, getSetting('agent_max_steps')) : getSetting('agent_max_steps');
+  const limit = code ? Math.max(budget, getSetting('agent_code_max_tokens')) : budget;
+  const maxOutput = code ? getSetting('agent_code_max_output_tokens') : undefined;
   const msgs = [{ ...messages[0], content: `${messages[0].content}\n\n${toolManual(tools)}` }, ...messages.slice(1)];
+  const ask = (t) => call({ task: t, employee, messages: msgs, signal, budget: limit, maxOutput });
   const ctx = { task, employee, businessId: task.business_id ?? null, signal, tools };
   const used = (t) => (t.tokens_in || 0) + (t.tokens_out || 0);
   let lastDraft = '';
   for (let step = 0; ; step++) {
     const fresh = getTask(task.id) || task;
     // Not enough budget left for another tool round plus a final answer: answer now.
-    const lowBudget = step > 0 && budget - used(fresh) < estimateMessagesTokens(msgs) * 2 + 1500;
+    const lowBudget = step > 0 && limit - used(fresh) < estimateMessagesTokens(msgs) * 2 + 1500;
     if (step >= maxSteps || lowBudget) {
       logTask(task.id, 'tool_limit', lowBudget ? 'Anggaran token hampir habis: menulis jawaban akhir' : `Batas ${maxSteps} langkah alat tercapai: menulis jawaban akhir`, 'warn');
       msgs.push({ role: 'user', content: FINAL });
-      const last = await call({ task: fresh, employee, messages: msgs, signal });
+      const last = await ask(fresh);
       return stripToolCalls(last.content) || lastDraft;
     }
-    const res = await call({ task: fresh, employee, messages: msgs, signal });
+    const res = await ask(fresh);
     const tc = parseToolCall(res.content);
+    const cut = isTruncated(res);
+    if (cut && (code || tc) && (!tc || tc.error)) {
+      // A reply cut off by the output limit (usually a long file): ask for a shorter one instead of using it.
+      logTask(task.id, 'tool_error', 'Balasan AI terpotong (batas output per balasan): diminta menulis lebih pendek', 'warn');
+      msgs.push({ role: 'assistant', content: '[balasan terpotong karena terlalu panjang]' });
+      msgs.push({ role: 'user', content: TRUNCATED });
+      continue;
+    }
     if (!tc) return res.content;
     if (tc.before) lastDraft = tc.before;
     msgs.push({ role: 'assistant', content: res.content });
@@ -136,6 +162,11 @@ export async function runAgent({ task, employee, messages, signal, call, budget 
     else {
       logTask(task.id, 'tool_call', `${tc.name} ${argSummary(tc.args)}`);
       out = await execute(tc, ctx);
+    }
+    // Content the tool already stored (e.g. code in GitHub) is not sent again on the next steps.
+    if (out.compact) {
+      msgs[msgs.length - 1] = { role: 'assistant', content: `${out.compact}\n<tool_call>${JSON.stringify({ name: tc.name, args: tc.args })}</tool_call>` };
+      if (lastDraft === tc.before) lastDraft = '';
     }
     if (out.error) {
       logTask(task.id, 'tool_error', `${tc.name || '?'}: ${truncate(out.error, 400)}`, 'warn');
