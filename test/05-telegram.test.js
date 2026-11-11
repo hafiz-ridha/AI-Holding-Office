@@ -78,7 +78,7 @@ test('holding commands: /overview /companies /business <slug> /finance /tasks /r
   assert.match(await handleCommand('/business nope', OWNER, 1, tz), /tidak ditemukan/);
   const fin = await handleCommand('/finance', OWNER, 1, tz);
   assert.match(fin, /Coffee Business[\s\S]*2\.500\.000/);
-  assert.match(fin, /Wins Court[\s\S]*DATA NOT AVAILABLE/);
+  assert.match(fin, /Wins Court[\s\S]*Belum ada catatan bulan ini/);
   assert.match(await handleCommand('/tasks coffee', OWNER, 1, tz), /Tugas aktif — Coffee Business/);
   const report = await handleCommand('/report', OWNER, 1, tz);
   for (const h of ['AI VIRTUAL HOLDING', 'DAILY REPORT', 'GROUP OVERVIEW:', 'BUSINESS REPORTS:', 'SHARED SERVICES:', 'CEO RECOMMENDATIONS:']) {

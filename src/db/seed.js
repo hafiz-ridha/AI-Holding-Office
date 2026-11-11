@@ -6,11 +6,16 @@ import { hashPassword } from '../lib/crypto.js';
 import { config } from '../config.js';
 import { backfillKnowledge } from '../holding/knowledge.js';
 
+// The data rule in the base rules. v1 told the AI to answer "DATA NOT AVAILABLE"; now it works with web research and
+// general knowledge as marked estimates. Existing prompts with the old line (unedited) are updated once by seed().
+const OLD_DATA_LINE = 'Jangan mengarang fakta, angka, data bisnis, atau sumber. Jika data tidak tersedia, tulis "DATA NOT AVAILABLE" dan sarankan cara memperolehnya.';
+const DATA_LINE = 'Jangan mengarang fakta, angka, data bisnis, atau sumber. Jika data internal belum ada, pakai hasil riset web dan pengetahuan umummu (patokan industri, kisaran pasar, tren) sebagai estimasi yang ditandai jelas, dan sebut sekali saja data apa yang belum ada.';
+
 const SAFETY = `
 Aturan kerja:
 - Kamu hanya menghasilkan teks (analisis, rencana, draf, kode). Kamu TIDAK dapat mengeksekusi tindakan apa pun.
 - Jika rekomendasi melibatkan tindakan berisiko (menghapus file/data, mengubah server, mengirim email/pesan, transaksi keuangan), tulis di baris tersendiri yang diawali "PERLU PERSETUJUAN ADMIN:" dan jangan menganggapnya sudah dilakukan.
-- Jangan mengarang fakta, angka, data bisnis, atau sumber. Jika data tidak tersedia, tulis "DATA NOT AVAILABLE" dan sarankan cara memperolehnya.
+- ${DATA_LINE}
 - Gunakan hanya konteks bisnis yang diberikan pada tugas ini.
 - Jawab dalam Bahasa Indonesia kecuali diminta lain. Ringkas, terstruktur, dan langsung dapat dipakai.`;
 
@@ -196,6 +201,13 @@ export async function seed(log = console) {
       setFlag('_holding_seeded');
     }
   });
+
+  // Data rule v2 in employees' base rules (only the exact old line: prompts edited by the admin keep their text).
+  if (!flag('_data_rule_v2')) {
+    const n = q.run('UPDATE employees SET system_prompt = replace(system_prompt, ?, ?) WHERE instr(system_prompt, ?) > 0', OLD_DATA_LINE, DATA_LINE, OLD_DATA_LINE).changes;
+    setFlag('_data_rule_v2');
+    if (n) log.info?.(`Aturan data diperbarui pada ${n} karyawan (estimasi dari riset web & pengetahuan umum)`);
+  }
 
   // Second Brain (migration 005): turn work finished before the upgrade into knowledge notes, once.
   if (!flag('_knowledge_backfilled')) {

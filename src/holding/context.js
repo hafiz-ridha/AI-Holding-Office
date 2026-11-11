@@ -76,14 +76,14 @@ export function businessContextText(employee, task, { kbQuery = '', kbLimit = 3 
     if (!p) continue;
     const own = bid === task.business_id;
     parts.push(`### Bisnis: ${p.name} (slug: ${p.slug})${own ? '' : ' — akses tambahan dari pemilik'}
-Industri: ${p.industry || 'DATA NOT AVAILABLE'}
+Industri: ${p.industry || 'belum diisi'}
 Status: ${p.status}
-Deskripsi: ${p.description || 'DATA NOT AVAILABLE'}`);
+Deskripsi: ${p.description || 'belum diisi'}`);
     const kb = searchKnowledge(bid, kbQuery, { limit: own ? kbLimit : 1, maxChars: own ? 2400 : 800 });
     parts.push(
       kb.length
         ? `Knowledge base ${p.name}:\n` + kb.map((d) => `- [${d.title}] ${d.snippet.replace(/\n+/g, ' ')}`).join('\n')
-        : `Knowledge base ${p.name}: DATA NOT AVAILABLE (belum ada dokumen)`
+        : `Dokumen internal ${p.name}: belum ada yang diunggah (pakai riset web & pengetahuan umum)`
     );
     if (canSeeFinance(employee)) {
       const m = monthBounds(tz);
@@ -103,7 +103,7 @@ export function holdingOverviewText(task) {
   else if (!cross) {
     return {
       businesses,
-      text: businesses.map((b) => `- slug "${b.slug}": ${b.name} (${b.industry || 'industri: DATA NOT AVAILABLE'})`).join('\n') +
+      text: businesses.map((b) => `- slug "${b.slug}": ${b.name} (${b.industry || 'industri belum diisi'})`).join('\n') +
         '\n(Data detail lintas bisnis tidak dibagikan: izin owner untuk laporan lintas bisnis nonaktif.)',
     };
   }
@@ -114,11 +114,11 @@ export function holdingOverviewText(task) {
     const latest = q.get("SELECT title, content, created_at FROM business_reports WHERE business_id = ? ORDER BY id DESC LIMIT 1", b.id);
     const docs = q.get('SELECT COUNT(*) n FROM documents WHERE business_id = ?', b.id).n;
     return `- slug "${b.slug}": ${b.name}
-  Industri: ${b.industry || 'DATA NOT AVAILABLE'} | Manager: ${mgr && mgr.enabled ? mgr.name : 'TIDAK ADA (Group CEO menangani langsung)'}
-  Deskripsi: ${truncate(b.description || 'DATA NOT AVAILABLE', 200)}
+  Industri: ${b.industry || 'belum diisi'} | Manager: ${mgr && mgr.enabled ? mgr.name : 'TIDAK ADA (Group CEO menangani langsung)'}
+  Deskripsi: ${truncate(b.description || 'belum diisi', 200)}
   Tugas bulan ini: ${s.total} (selesai ${s.completed}, gagal ${s.failed}, aktif ${s.active}) | Dokumen knowledge base: ${docs}
   Keuangan bulan ini: ${summaryText(fin).replace(/\n/g, ' ')}
-  Laporan terakhir: ${latest ? `${latest.title} — ${truncate(latest.content.replace(/\s+/g, ' '), 300)}` : 'DATA NOT AVAILABLE'}`;
+  Laporan terakhir: ${latest ? `${latest.title} — ${truncate(latest.content.replace(/\s+/g, ' '), 300)}` : 'belum ada'}`;
   });
   return { businesses, text: blocks.join('\n') || 'Tidak ada bisnis aktif.' };
 }

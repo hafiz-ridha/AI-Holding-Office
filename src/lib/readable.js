@@ -153,11 +153,52 @@ function salvage(s) {
 }
 
 /**
- * Natural text for people. Text that is JSON (optionally in one ```json fence, optionally followed by prose)
- * becomes Markdown; anything else is returned unchanged. opts.fences: also turn ```json blocks inside prose into
- * text (for chat/Telegram, where code blocks of data are not useful).
+ * Leftover "DATA NOT AVAILABLE" labels (older prompts, model habits) in natural words: sections that only said that
+ * are folded into one closing "Catatan data" line instead of repeating in every section; other labels read
+ * "belum ada data".
  */
-export function readable(text, { fences = false, depth = 0 } = {}) {
+export function tidyMissing(text) {
+  const src = String(text ?? '');
+  if (!/data not available/i.test(src)) return src;
+  const lines = src.split('\n');
+  const out = [];
+  const gaps = [];
+  for (let i = 0; i < lines.length; i++) {
+    const h = lines[i].match(/^#{1,6}\s+(.+)$/);
+    if (h) {
+      let j = i + 1;
+      while (j < lines.length && !/^#{1,6}\s/.test(lines[j])) j++;
+      const body = lines.slice(i + 1, j);
+      const rest = body.join(' ').replace(/data not available/gi, '').replace(/[\s\-*•_>|.:()]+/g, '');
+      if (!rest && body.some((l) => /data not available/i.test(l))) {
+        gaps.push(h[1].replace(/[*_`]/g, '').trim());
+        i = j - 1;
+        continue;
+      }
+    }
+    out.push(lines[i]);
+  }
+  let s = out.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+    .replace(/\*{0,2}DATA NOT AVAILABLE\*{0,2}/gi, 'belum ada data')
+    .replace(/(^|\n)(\s*(?:[-*•]\s+)?)belum ada data/g, (m, a, b) => `${a}${b}Belum ada data`);
+  if (gaps.length) {
+    const note = `belum ada data untuk ${gaps.join(', ')}.`;
+    s = /^Catatan data:/m.test(s) ? s.replace(/^(Catatan data:.*)$/m, (m) => `${m.replace(/\.?\s*$/, '.')} Juga ${note}`) : `${s}\n\nCatatan data: ${note}`;
+  }
+  return s;
+}
+
+/**
+ * Natural text for people. Text that is JSON (optionally in one ```json fence, optionally followed by prose)
+ * becomes Markdown; anything else is returned unchanged (apart from leftover "DATA NOT AVAILABLE" labels, see
+ * tidyMissing). opts.fences: also turn ```json blocks inside prose into text (for chat/Telegram, where code blocks of
+ * data are not useful).
+ */
+export function readable(text, opts = {}) {
+  return tidyMissing(toText(text, opts));
+}
+
+function toText(text, { fences = false, depth = 0 } = {}) {
   const s = String(text ?? '').trim();
   if (!s || depth > 3) return s;
   const whole = s.match(/^```(?:json)?[ \t]*\n?([\s\S]*?)\n?```$/i);

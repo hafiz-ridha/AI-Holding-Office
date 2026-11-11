@@ -13,7 +13,7 @@ function taskBar(s) {
 }
 
 export function financeLine(fin) {
-  if (!fin) return h('span', { class: 'muted small' }, 'Keuangan bulan ini: DATA NOT AVAILABLE');
+  if (!fin) return h('span', { class: 'muted small' }, 'Keuangan bulan ini: belum ada catatan');
   return h('span', { class: 'small' }, 'Bersih bulan ini: ', fin.currencies.map((c, i) => [i ? ' · ' : '', h('strong', { style: { color: c.net >= 0 ? 'var(--ok)' : 'var(--err)' } }, fmtMoney(c.net, c.currency))]));
 }
 

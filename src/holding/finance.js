@@ -113,7 +113,7 @@ export function formatMoney(amount, currency) {
 }
 
 export function summaryText(s) {
-  if (!s) return 'DATA NOT AVAILABLE (belum ada catatan keuangan pada periode ini)';
+  if (!s) return 'belum ada catatan keuangan di sistem untuk periode ini';
   const lines = s.currencies.map(
     (c) => `- ${c.currency}: pemasukan ${formatMoney(c.income, c.currency)}, pengeluaran ${formatMoney(c.expense, c.currency)}, bersih ${formatMoney(c.net, c.currency)} (${c.records} catatan)`
   );

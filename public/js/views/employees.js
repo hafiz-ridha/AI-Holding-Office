@@ -60,7 +60,7 @@ export async function editEmployee(e, done) {
       field('Unit organisasi', org, 'Shared Services membantu semua bisnis; staf bisnis hanya bisnis yang dipilih.'),
       h('div', { class: 'full field' }, h('span', null, 'Bisnis yang ditangani'), h('div', { class: 'row', style: { gap: '4px 16px' } }, bizBoxes.length ? bizBoxes.map((x) => x.el) : h('span', { class: 'muted small' }, 'Belum ada bisnis'))),
       h('div', { class: 'full' }, field('Kepribadian', personality)),
-      h('div', { class: 'full' }, field('System prompt', prompt, 'Aturan keamanan (tanpa eksekusi tindakan, DATA NOT AVAILABLE, PERLU PERSETUJUAN ADMIN) disarankan tetap ada.')),
+      h('div', { class: 'full' }, field('System prompt', prompt, 'Aturan keamanan (tanpa eksekusi tindakan, tidak mengarang data, PERLU PERSETUJUAN ADMIN) disarankan tetap ada.')),
       field('Provider khusus', provider, 'Kosong = model tingkatan bila diatur, selain itu dipilih otomatis sesuai kebutuhan tugas.'),
       field('Model khusus', h('div', null, model, modelList)),
       field('Temperature', temp), field('Maks token output (0 = global)', maxTok),

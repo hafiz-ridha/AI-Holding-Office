@@ -301,7 +301,9 @@ memanggil `runDueRecurring()`:
 
 ### Riset web & kebijakan persetujuan
 
-- `src/research/web.js`: `needsWeb(task)` (kata kunci tren/berita/media sosial/kompetitor/harga/regulasi/…) →
+- `src/research/web.js`: `needsWeb(task)` (kata kunci tren/berita/media sosial/kompetitor/harga/regulasi/…, semua
+  business task, dan tugas evaluasi/strategi/penjualan/harga/proyeksi di sebuah bisnis; jenis `market` mencari berita
+  industri dan patokan harga/omzet) →
   `plan()` (jenis + topik dari judul & industri bisnis) → `research()`, yang berisi:
   - Google News RSS, Google Trends RSS, Wikipedia API, dan DuckDuckGo HTML, ditambah isi 0–5 halaman artikel langsung.
   - Hasilnya blok teks bersumber [W1]… plus `refs`, disimpan di `tasks.web_refs`.
@@ -311,6 +313,11 @@ memanggil `runDueRecurring()`:
     pesan *user* sebagai data, dengan perintah untuk mengabaikan instruksi di dalamnya.
   - Pengaturan: `web_research_enabled`, `web_research_pages`. Di tes, alamat sumber diarahkan ke alamat lokal yang
     ditolak guard, sehingga tes tidak pernah ke internet.
+- `DATA_RULE` (`src/agents/prompts.js`) ada di prompt kerja dan laporan: angka internal hanya dari konteks sistem;
+  bila belum ada, pakai riset web dan pengetahuan umum sebagai "estimasi" yang ditandai, lalu sebut data yang kurang
+  sekali di baris "Catatan data". Konteks bisnis menulis "belum diisi"/"belum ada", bukan "DATA NOT AVAILABLE". Aturan
+  dasar yang tersimpan di prompt karyawan diperbarui sekali oleh `seed()` (flag `_data_rule_v2`, hanya baris lama yang
+  persis sama). `tidyMissing()` (`src/lib/readable.js`, dipanggil oleh `readable()`) merapikan label lama di jawaban.
 - `APPROVAL_RULE` (`src/agents/prompts.js`) ada di semua prompt yang bisa menghasilkan rekomendasi. Isinya: tandai
   "PERLU PERSETUJUAN ADMIN" hanya untuk tindakan penting, dan jangan pernah meminta owner mengisi data manual.
 - `classifyApproval` (`src/holding/approvals.js`) adalah lapis kedua di server:

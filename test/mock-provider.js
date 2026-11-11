@@ -98,6 +98,10 @@ export async function startMockProvider({ key = 'test-key', delayMs = 0 } = {}) 
       if (/PLAN_TRUNCATED/.test(lastUser) && /RENCANA_HOLDING_JSON/.test(lastUser)) {
         content = '{"analysis": "Tren minggu ini", "direct_answer": "Tren kopi susu naik 20% dan pelanggan baru banyak datang dari Instagram, sehingga';
       }
+      // Old habit: "DATA NOT AVAILABLE" in every section.
+      if (/DNA_REPORT/.test(lastUser) && !/RENCANA_/.test(lastUser)) {
+        content = '## Ringkasan\nPenjualan stabil. Omzet: DATA NOT AVAILABLE.\n\n## Hasil Utama\nDATA NOT AVAILABLE\n\n## Peluang\n- DATA NOT AVAILABLE\n\n## Rekomendasi\n- Uji paket bundling (estimasi harga pasar Rp25.000–35.000 [W1]).';
+      }
       if (/JSON_REPLY/.test(lastUser) && !/RENCANA_/.test(lastUser)) {
         content = '```json\n' + JSON.stringify({ reply: 'Halo owner, tren kopi susu gula aren sedang naik.', poin_penting: ['Kopi susu gula aren', 'Cold brew'], status: 'ok' }) + '\n```';
       }

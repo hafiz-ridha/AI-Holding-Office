@@ -146,3 +146,60 @@ test('failed task: the cause in Telegram has no JSON error body', async () => {
   assert.match(msg.text, /❌ Tugas gagal: <b>Riset harga<\/b>[\s\S]*Penyebab: HTTP 429: Provider returned error — Rate limit exceeded: free-models-per-day$/);
   assert.ok(noJson(msg.text));
 });
+
+// ---------------- missing internal data: outside data & estimates instead of "DATA NOT AVAILABLE" ----------------
+
+test('leftover "DATA NOT AVAILABLE": empty sections fold into one "Catatan data" line, other labels read naturally', () => {
+  const r = readable('## Ringkasan\nOmzet: DATA NOT AVAILABLE.\n\n## Hasil Utama\nDATA NOT AVAILABLE\n\n## Peluang\n- **DATA NOT AVAILABLE**\n\n## Rekomendasi\n- Uji promo.');
+  assert.equal(r, '## Ringkasan\nOmzet: belum ada data.\n\n## Rekomendasi\n- Uji promo.\n\nCatatan data: belum ada data untuk Hasil Utama, Peluang.');
+  assert.equal(readable('Catatan data: omzet belum tercatat.\n\n## Peluang\nDATA NOT AVAILABLE'), 'Catatan data: omzet belum tercatat. Juga belum ada data untuk Peluang.');
+  assert.equal(readable('DATA NOT AVAILABLE'), 'Belum ada data');
+});
+
+test('prompts and AI context: work with web research & marked estimates, no "DATA NOT AVAILABLE" instruction', async () => {
+  const prompts = await import('../src/agents/prompts.js');
+  const ctx = await import('../src/holding/context.js');
+  const emp = q.get("SELECT * FROM employees WHERE org_unit = 'business' AND enabled = 1 ORDER BY id LIMIT 1");
+  const biz = q.get('SELECT business_id FROM business_employees WHERE employee_id = ?', emp.employee_id ?? emp.id);
+  const task = { id: 1, title: 'Evaluasi penjualan', description: 'Evaluasi penjualan bulan ini', business_id: biz?.business_id ?? null, priority: 2 };
+  const all = [
+    ...prompts.workMessages({ employee: emp, task, businessContext: ctx.businessContextText(emp, task), memories: [], tz: 'Asia/Jakarta' }),
+    ...prompts.businessSynthesisMessages({ manager: emp, task, businessName: 'X', results: [], budgetChars: 2000, tz: 'Asia/Jakarta' }),
+    ...prompts.holdingSynthesisMessages({ ceo: emp, task, results: [], budgetChars: 2000, tz: 'Asia/Jakarta' }),
+  ].map((m) => m.content).join('\n');
+  assert.ok(!/tulis "DATA NOT AVAILABLE"|ditandai DATA NOT AVAILABLE|dengan DATA NOT AVAILABLE/.test(all), 'no instruction to answer DATA NOT AVAILABLE');
+  assert.match(all, /riset web[\s\S]*pengetahuan umum[\s\S]*"estimasi"[\s\S]*Catatan data/);
+  assert.ok(!/DATA NOT AVAILABLE/.test(ctx.businessContextText(emp, task)));
+  assert.ok(!/DATA NOT AVAILABLE/.test(ctx.holdingOverviewText({}).text));
+  // Employees' base rules (stored in their system prompt) no longer ask for the label.
+  assert.ok(!q.get("SELECT COUNT(*) n FROM employees WHERE system_prompt LIKE '%tulis \"DATA NOT AVAILABLE\"%'").n);
+});
+
+test('base rules of existing employees: the old data line is replaced once, edited prompts are kept', async () => {
+  const { seed } = await import('../src/db/seed.js');
+  const old = 'Jangan mengarang fakta, angka, data bisnis, atau sumber. Jika data tidak tersedia, tulis "DATA NOT AVAILABLE" dan sarankan cara memperolehnya.';
+  const [a, b] = q.all('SELECT id FROM employees ORDER BY id LIMIT 2');
+  q.run('UPDATE employees SET system_prompt = ? WHERE id = ?', `Kamu adalah A.\n- ${old}\n- Jawab singkat.`, a.id);
+  q.run('UPDATE employees SET system_prompt = ? WHERE id = ?', 'Prompt buatan admin: tulis DATA NOT AVAILABLE bila kosong.', b.id);
+  q.run("DELETE FROM system_settings WHERE key = '_data_rule_v2'");
+  await seed({ info() {}, warn() {} });
+  const pa = q.get('SELECT system_prompt p FROM employees WHERE id = ?', a.id).p;
+  assert.match(pa, /^Kamu adalah A\.\n- Jangan mengarang fakta[^\n]*riset web dan pengetahuan umummu[^\n]*estimasi[^\n]*\n- Jawab singkat\.$/);
+  assert.equal(q.get('SELECT system_prompt p FROM employees WHERE id = ?', b.id).p, 'Prompt buatan admin: tulis DATA NOT AVAILABLE bila kosong.');
+});
+
+test('business evaluation & planning tasks get web research; owner instructions without a business do not', async () => {
+  const { needsWeb } = await import('../src/research/web.js');
+  assert.equal(needsWeb({ title: 'Evaluasi kinerja bulan ini', kind: 'business', business_id: 2 }), true);
+  assert.equal(needsWeb({ title: 'Susun strategi promo musim hujan', kind: 'subtask', business_id: 2 }), true);
+  assert.equal(needsWeb({ title: 'Evaluasi seluruh bisnis', kind: 'instruction', business_id: null }), false);
+  assert.equal(needsWeb({ title: 'Rapikan notulen rapat', kind: 'direct', business_id: 2 }), false);
+  assert.equal(needsWeb({ title: 'Cek tren kopi', kind: 'direct', business_id: null }), true);
+});
+
+test('an answer that still says "DATA NOT AVAILABLE" everywhere is stored and sent tidied', async () => {
+  const emp = q.get("SELECT * FROM employees WHERE enabled = 1 AND org_unit = 'shared' ORDER BY id LIMIT 1");
+  const t = tasks.createTask({ kind: 'direct', title: 'Laporan omzet', description: 'DNA_REPORT ringkas omzet', employeeId: emp.id });
+  const r = await done(t.id);
+  assert.equal(r.result, '## Ringkasan\nPenjualan stabil. Omzet: belum ada data.\n\n## Rekomendasi\n- Uji paket bundling (estimasi harga pasar Rp25.000–35.000 [W1]).\n\nCatatan data: belum ada data untuk Hasil Utama, Peluang.');
+});

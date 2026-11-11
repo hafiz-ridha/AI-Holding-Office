@@ -24,6 +24,13 @@ export const APPROVAL_RULE = `Aturan persetujuan & data:
 - Informasi, analisis, rekomendasi, draf, ringkasan, dan riset TIDAK perlu persetujuan; tulis sebagai rekomendasi biasa.
 - Jangan pernah meminta admin/owner menambah, mengisi, atau melengkapi data secara manual. Gunakan data di sistem dan hasil riset web yang diberikan; jika masih kurang, tulis asumsi atau estimasi yang wajar secara eksplisit lalu tetap selesaikan pekerjaannya.`;
 
+// Internal data that is not in the system: never invented, never a reason to stop or to ask the owner. The AI works
+// with the web research and its own general knowledge as marked estimates and says once what is missing.
+export const DATA_RULE = `Aturan data:
+- Angka internal bisnis (omzet, pelanggan, stok, keuangan) hanya dari konteks sistem di atas; jangan mengarangnya.
+- Bila data internal belum ada, tetap berikan analisis lengkap memakai hasil riset web (sebut [W1], [W2], dst.) dan pengetahuan umummu: patokan industri, kisaran harga dan biaya pasar, perilaku pelanggan, tren umum. Tandai angka seperti itu sebagai "estimasi" atau dengan sumbernya, bukan sebagai data bisnis ini.
+- Jangan menulis "DATA NOT AVAILABLE" dan jangan mengulang kekurangan data di setiap bagian. Sebut sekali saja di akhir, satu baris "Catatan data: ..." dengan kalimat biasa (contoh: "Catatan data: omzet bulan ini belum tercatat di sistem; angka di atas estimasi pasar.").`;
+
 // Automatic web research (src/research/web.js): cited outside data, placed in the user message as data.
 const webBlock = (web) => (web ? `
 
@@ -44,7 +51,7 @@ Prioritas: ${PRIORITY_LABEL[task.priority] || 'normal'}
 Detail:
 ${truncate(task.description || '(tidak ada detail tambahan)', 6000)}
 
-Bisnis aktif dalam holding (data nyata dari sistem; "DATA NOT AVAILABLE" berarti data belum ada):
+Bisnis aktif dalam holding (data nyata dari sistem; "belum ada" berarti belum tercatat di sistem):
 ${overview}
 
 Shared Services (tim pusat):
@@ -83,7 +90,7 @@ ${team.map(teamLine).join('\n') || '- (tidak ada tim; kerjakan sendiri)'}
 Tugasmu sebagai Business Manager:
 1. Jika kamu dapat menyelesaikan tugas ini sendiri dengan data di atas, isi "direct_answer" (laporan lengkap) dan kosongkan "subtasks". Ini lebih hemat.
 2. Jika perlu tim, buat maksimal ${maxSubtasks} subtugas yang jelas dan tidak tumpang tindih. Pilih assignee dari slug di atas.
-3. Jangan mengarang data. Tulis "DATA NOT AVAILABLE" bila data internal tidak tersedia, lalu tetap kerjakan dengan data yang ada, hasil riset web, atau asumsi yang dinyatakan. Jangan meminta owner mengisi data manual.
+3. Jangan mengarang data internal. Bila belum ada, tetap kerjakan dengan data yang ada, hasil riset web, dan pengetahuan umum (patokan industri, kisaran pasar) yang ditandai "estimasi". Jangan menulis "DATA NOT AVAILABLE" dan jangan meminta owner mengisi data manual.
 
 Format keluaran: RENCANA_JSON. Balas HANYA dengan satu objek JSON valid tanpa teks lain:
 {"analysis": "ringkasan 2-4 kalimat", "direct_answer": null, "subtasks": [{"title": "judul", "description": "instruksi rinci dan hasil yang diharapkan", "assignee": "slug", "priority": "low|normal|high|urgent"}]}`;
@@ -111,7 +118,9 @@ Prioritas: ${PRIORITY_LABEL[task.priority] || 'normal'}
 Instruksi:
 ${truncate(task.description || task.title, 6000)}${ctx}${webBlock(web)}
 
-Kerjakan tugas ini sekarang dan berikan hasil akhir yang lengkap dan siap pakai, ditulis sebagai teks biasa/Markdown yang enak dibaca manusia (bukan JSON, kecuali tugas memintanya). Jangan mengarang data; tulis "DATA NOT AVAILABLE" untuk data internal yang memang tidak ada, lalu tetap selesaikan dengan asumsi yang dinyatakan. Akhiri dengan bagian "Catatan untuk manager" (1-3 poin: asumsi, risiko, atau baris "PERLU PERSETUJUAN ADMIN: ..." hanya untuk tindakan penting).
+Kerjakan tugas ini sekarang dan berikan hasil akhir yang lengkap dan siap pakai, ditulis sebagai teks biasa/Markdown yang enak dibaca manusia (bukan JSON, kecuali tugas memintanya). Akhiri dengan bagian "Catatan untuk manager" (1-3 poin: asumsi, risiko, atau baris "PERLU PERSETUJUAN ADMIN: ..." hanya untuk tindakan penting).
+
+${DATA_RULE}
 
 ${APPROVAL_RULE}`;
   return [
@@ -149,7 +158,9 @@ Susun laporan bisnis untuk Group CEO dengan struktur:
 ## Peluang
 ## Rekomendasi
 ## Perlu Persetujuan Owner
-(tulis dalam Markdown biasa, bukan JSON; tulis "Tidak ada" jika kosong; tandai data yang tidak ada dengan DATA NOT AVAILABLE)
+(tulis dalam Markdown biasa, bukan JSON; tulis "Tidak ada" jika kosong)
+
+${DATA_RULE}
 
 ${APPROVAL_RULE}`;
   return [
@@ -176,7 +187,9 @@ Buat laporan konsolidasi holding untuk pemilik dengan struktur:
 ## Rekomendasi Keputusan
 ## Prioritas Berikutnya
 ## Perlu Perhatian Pemilik
-Tulis dalam Markdown biasa, bukan JSON. Jangan mengarang angka. Bisnis tanpa data ditandai DATA NOT AVAILABLE. Sebutkan tugas yang gagal.
+Tulis dalam Markdown biasa, bukan JSON. Sebutkan tugas yang gagal.
+
+${DATA_RULE}
 
 ${APPROVAL_RULE}`;
   return [

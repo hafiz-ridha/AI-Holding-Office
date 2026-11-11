@@ -143,16 +143,21 @@ export function pageText(html, max = 1500) {
 
 // ---------------- which tasks need the web, and what to search ----------------
 const WEB_HINT = /\b(tren|trend|trending|berita|news|terbaru|terkini|hari ini|minggu ini|update|media sosial|sosmed|instagram|tiktok|youtube|twitter|viral|hashtag|influencer|kompetitor|pesaing|competitor|harga pasar|market|pasar|riset|research|survei|internet|online|regulasi|peraturan|kurs|inflasi|ekonomi|statistik|data publik|google)\b/i;
+// Business analysis & planning also gets outside data (market prices, benchmarks, customer behaviour): internal
+// numbers are often not in the system yet, and the AI then works with outside data and marked estimates.
+const BUSINESS_HINT = /\b(evaluasi|strategi|rencana|rekomendasi|peluang|promo|promosi|pemasaran|marketing|penjualan|omzet|omset|harga|pricing|kinerja|performa|proyeksi|target|benchmark|industri|analisis|ide|produk|menu|pelanggan|customer|konsumen|ekspansi|kampanye|biaya|margin|laba|profit)\b/i;
 const KIND = [
   ['social', /\b(media sosial|sosmed|instagram|tiktok|youtube|konten|hashtag|viral|influencer)\b/i],
   ['competitor', /\b(kompetitor|pesaing|competitor)\b/i],
   ['news', /\b(berita|news|kabar)\b/i],
   ['trend', /\b(tren|trend|trending|pasar|market)\b/i],
+  ['market', /\b(evaluasi|kinerja|performa|penjualan|omzet|omset|harga|pricing|biaya|margin|laba|profit|proyeksi|target|benchmark|strategi|rencana|peluang)\b/i],
 ];
-const GENERIC = new Set(words('riset ringkasan pantauan pantau ide rencana laporan mingguan harian bulanan analisis buat susun cari tren trend berita konten media sosial sosmed kompetitor pesaing pasar market terbaru terkini industri hari minggu bulan ini instagram tiktok youtube update kerja tugas data', 80));
+const GENERIC = new Set(words('riset ringkasan pantauan pantau ide rencana laporan mingguan harian bulanan analisis buat susun cari tren trend berita konten media sosial sosmed kompetitor pesaing pasar market terbaru terkini industri hari minggu bulan ini instagram tiktok youtube update kerja tugas data evaluasi kinerja performa strategi rekomendasi peluang bisnis usaha semua seluruh tolong evaluasi proyeksi target', 120));
 
 export function needsWeb(task) {
-  return WEB_HINT.test(`${task.title} ${task.description || ''}`);
+  const text = `${task.title} ${task.description || ''}`;
+  return WEB_HINT.test(text) || task.kind === 'business' || (Boolean(task.business_id) && BUSINESS_HINT.test(text));
 }
 
 const cleanTitle = (t) => String(t || '').replace(/\s·\s\d{2}-\d{2}-\d{4}(\s\d{2}:\d{2})?$/, '');
@@ -168,6 +173,7 @@ export function plan(task, business = null) {
     trend: { news: `tren ${topic}`, web: `tren ${topic} ${year}`, trends: true, wiki: null },
     social: { news: `${topic} viral`, web: `tren konten ${topic} instagram tiktok ${year}`, trends: true, wiki: null },
     competitor: { news: `${topic} kompetitor`, web: `${topic} kompetitor harga promo`, trends: false, wiki: null },
+    market: { news: `bisnis ${topic}`, web: `${topic} ${year} harga omzet rata-rata`, trends: false, wiki: topic },
     general: { news: topic, web: topic, trends: false, wiki: topic },
   }[kind];
   return { kind, topic, ...q };

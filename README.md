@@ -228,8 +228,16 @@ diminta mengutipnya. Admin tidak perlu mengisi data itu manual. Tanpa API key:
 | DuckDuckGo HTML | Tautan artikel langsung, lalu isi beberapa halaman dibaca. Di jaringan yang memblokir DuckDuckGo (beberapa ISP Indonesia), langkah ini dilewati otomatis |
 
 - **Kapan riset jalan**: topik diambil dari judul tugas dan industri bisnisnya. Riset berjalan untuk tugas kerja,
-  rencana Business Manager, dan rencana Group CEO yang membutuhkannya. Balasan cepat obrolan hanya diriset jika diminta
-  (mis. "berita", "harga", "tren").
+  rencana Business Manager, dan rencana Group CEO yang membutuhkannya. Ini termasuk semua tugas bisnis dan tugas
+  evaluasi, strategi, penjualan, harga, promosi, atau proyeksi di sebuah bisnis: AI mendapat patokan pasar (harga, omzet
+  rata-rata, berita industri). Balasan cepat obrolan hanya diriset jika diminta (mis. "berita", "harga", "tren").
+- **Data internal yang belum ada** (omzet, pelanggan, stok, keuangan) tidak membuat AI berhenti atau menulis
+  "DATA NOT AVAILABLE" di setiap bagian:
+  - AI tetap bekerja dengan hasil riset web dan pengetahuan umumnya (patokan industri, kisaran pasar, tren). Angka
+    seperti itu ditandai "estimasi" atau dengan sumbernya [W1], tidak pernah diakui sebagai data bisnis Anda.
+  - Data yang belum ada disebut sekali saja di akhir, dalam baris "Catatan data: …".
+  - Jika AI masih menulis label lama, server merapikannya: bagian yang hanya berisi label itu digabung ke "Catatan
+    data", dan sisanya menjadi "belum ada data".
 - **Sumber yang dipakai** tampil di detail tugas (*Sumber web*) dan di riwayat tugas.
 - **Aman**:
   - Server hanya membuka alamat publik http/https. Alamat internal/privat ditolak, juga setelah redirect.
@@ -410,5 +418,5 @@ src/            server.js, app.js, config.js, events.js
   cli/          reset-password.js
 public/         SPA tanpa build step (HTML + CSS + ES modules + Canvas); assets/office-atlas.png (sprite sheet)
 scripts/        deploy-aapanel.sh (install/update/backup di VPS aaPanel), build-office-atlas.mjs (generator sprite sheet PNG)
-test/           node:test (136 tes) + test/system (restart, beban, RAM)
+test/           node:test (141 tes) + test/system (restart, beban, RAM)
 ```

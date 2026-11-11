@@ -54,7 +54,7 @@ async function profile(el, b, data) {
           h('dt', null, 'Tugas'), h('dd', null, `${b.stats.total} total · ${b.stats.active} aktif · ${b.stats.completed} selesai · ${b.stats.failed} gagal`),
           h('dt', null, 'Tim'), h('dd', null, `${data.team.length} karyawan`),
           h('dt', null, 'Persetujuan'), h('dd', null, `${data.approvals_pending} menunggu`),
-          h('dt', null, 'Keuangan bulan ini'), h('dd', null, data.finance_month ? data.finance_month.currencies.map((c) => `${c.currency}: masuk ${fmtMoney(c.income, c.currency)}, keluar ${fmtMoney(c.expense, c.currency)}`).join(' · ') : 'DATA NOT AVAILABLE')),
+          h('dt', null, 'Keuangan bulan ini'), h('dd', null, data.finance_month ? data.finance_month.currencies.map((c) => `${c.currency}: masuk ${fmtMoney(c.income, c.currency)}, keluar ${fmtMoney(c.expense, c.currency)}`).join(' · ') : 'Belum ada catatan')),
         h('h3', { style: { marginTop: '14px' } }, 'Isolasi data'),
         h('p', { class: 'small muted' }, 'Tugas, percakapan, memori, dokumen, laporan, dan catatan keuangan bisnis ini hanya dipakai sebagai konteks AI untuk bisnis ini. Dokumen hanya terlihat oleh bisnis lain bila Anda membagikannya secara eksplisit.'),
         b.extra_access.length ? h('p', { class: 'small' }, `Akses tambahan manager ke bisnis: ${b.extra_access.join(', ')}`) : null))
@@ -146,7 +146,7 @@ async function knowledge(el, b, _data, ctx) {
                       draw();
                     } }, 'Hapus'),
                   ]))))))
-            : emptyState('Knowledge base masih kosong. AI akan menandai data sebagai DATA NOT AVAILABLE.'))));
+            : emptyState('Knowledge base masih kosong. AI memakai riset web dan pengetahuan umum (ditandai estimasi) sampai ada dokumen.'))));
   };
   await draw();
 }
@@ -231,7 +231,7 @@ async function finance(el, b) {
                 h('div', { class: 'stat' }, h('div', { class: 'stat-label' }, `Pengeluaran (${c.currency})`), h('div', { class: 'stat-value' }, fmtMoney(c.expense, c.currency))),
                 h('div', { class: 'stat' }, h('div', { class: 'stat-label' }, `Bersih (${c.currency})`), h('div', { class: 'stat-value', style: { color: c.net >= 0 ? 'var(--ok)' : 'var(--err)' } }, fmtMoney(c.net, c.currency))),
               ])
-            : h('div', { class: 'stat' }, h('div', { class: 'stat-label' }, 'Ringkasan'), h('div', { class: 'stat-value' }, 'DATA NOT AVAILABLE'), h('div', { class: 'stat-sub' }, 'Belum ada catatan pada periode ini'))),
+            : h('div', { class: 'stat' }, h('div', { class: 'stat-label' }, 'Ringkasan'), h('div', { class: 'stat-value' }, 'Belum ada'), h('div', { class: 'stat-sub' }, 'Belum ada catatan pada periode ini'))),
         h('div', { class: 'card card-flush' },
           f.records.length
             ? h('div', { class: 'table-wrap' }, h('table', null,

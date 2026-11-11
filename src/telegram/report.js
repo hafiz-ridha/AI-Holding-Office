@@ -70,7 +70,7 @@ export function renderBusinessBlock(biz, stats, { detailed = false, tz = 'Asia/J
     const [from, to] = monthRange(localDate(Date.now(), tz));
     const fin = financeSummary(biz.id, from, to);
     L.push('  • Keuangan bulan ini:');
-    if (!fin) L.push('    – DATA NOT AVAILABLE');
+    if (!fin) L.push('    – belum ada catatan bulan ini');
     else for (const c of fin.currencies) L.push(`    – ${c.currency}: masuk ${formatMoney(c.income, c.currency)}, keluar ${formatMoney(c.expense, c.currency)}, bersih ${formatMoney(c.net, c.currency)}`);
     const latest = q.get("SELECT title, content, created_at FROM business_reports WHERE business_id = ? ORDER BY id DESC LIMIT 1", biz.id);
     if (latest) L.push(`  • Laporan terakhir: ${escapeHtml(truncate(latest.title, 60))}\n    ${escapeHtml(plainSnippet(section(latest.content, 'Rekomendasi') || latest.content, 300))}`);
@@ -183,7 +183,7 @@ export function buildFinanceReport(tz, ms = Date.now()) {
     const s = financeSummary(biz.id, from, to);
     L.push(`▸ ${b(biz.name)}`);
     if (!s) {
-      L.push('  DATA NOT AVAILABLE');
+      L.push('  Belum ada catatan bulan ini.');
       continue;
     }
     for (const c of s.currencies) {
@@ -196,7 +196,7 @@ export function buildFinanceReport(tz, ms = Date.now()) {
   L.push('');
   L.push(b('KONSOLIDASI (per mata uang, tanpa konversi):'));
   const cur = Object.entries(totals);
-  if (!cur.length) L.push('DATA NOT AVAILABLE');
+  if (!cur.length) L.push('Belum ada catatan keuangan bulan ini. Catatan masuk dari dashboard → Bisnis → Keuangan (bisa impor CSV).');
   for (const [c, t] of cur) L.push(`${c}: masuk ${formatMoney(t.income, c)} · keluar ${formatMoney(t.expense, c)} · bersih ${formatMoney(t.income - t.expense, c)}`);
   return L.join('\n');
 }
