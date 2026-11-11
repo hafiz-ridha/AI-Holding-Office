@@ -485,3 +485,14 @@ button.os-clock { background: none; border: 1px solid transparent; border-radius
 .office-main:fullscreen { width: 100vw; height: 100vh; }
 .os-btn:hover, .os-btn:focus-visible { border-color: #e9c99a; outline: none; }
 .office-float input[type='search'] { min-width: 0; flex: 1; padding: 4px 8px; font-size: 12.5px; }
+
+/* Connections (Google Drive device code), approval actions, agent steps */
+.device-code { border: 1px dashed var(--border); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; background: var(--surface-2); }
+.device-code-value { font-size: 26px; font-weight: 700; letter-spacing: 0.12em; user-select: all; }
+.next-conn { opacity: 0.8; }
+.action-line { margin-top: 6px; font-size: 13px; overflow-wrap: anywhere; }
+.action-line .btn { margin-left: 8px; }
+.action-line.ok b { color: var(--ok); }
+.action-line.error b { color: var(--err); }
+ol.timeline { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 6px; overflow-wrap: anywhere; }
+ol.timeline li.warn { color: var(--warn); }

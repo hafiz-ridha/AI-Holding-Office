@@ -1,6 +1,8 @@
-// Owner approvals. Extracted from AI results that flag risky actions. Deciding only records the owner's decision:
-// the application never executes the action itself.
-import { q, now, tx } from '../db/index.js';
+// Owner approvals.
+//  - From AI results that flag a risky recommendation ("PERLU PERSETUJUAN ..."): deciding only records the decision.
+//  - From an agent that asked for an important tool (createActionApproval): the approval carries the action, which
+//    runs only after the owner approves it (src/agents/actions.js); rejecting cancels it.
+import { q, now, tx, json } from '../db/index.js';
 import { truncate } from '../lib/text.js';
 import { bus } from '../events.js';
 import { getSetting } from '../lib/settings.js';
@@ -76,6 +78,35 @@ export function createApprovalsFromResult(task, text) {
   return created;
 }
 
+/** An approval for an action the agent asked for (important tool). Runs only after the owner approves it. */
+export function createActionApproval({ task, employee, businessId = null, tool, args, detail }) {
+  const action = JSON.stringify({ tool, args, employee_id: employee?.id ?? null });
+  const dup = q.get("SELECT * FROM approvals WHERE task_id IS ? AND status = 'pending' AND action = ?", task?.id ?? null, action);
+  if (dup) return dup;
+  const r = q.run(
+    `INSERT INTO approvals(task_id, business_id, title, detail, status, action, action_status, created_at)
+     VALUES (?,?,?,?, 'pending', ?, 'waiting', ?)`,
+    task?.id ?? null, businessId ?? null, truncate(task?.title || tool, 200), truncate(detail, 400), action, now()
+  );
+  const id = Number(r.lastInsertRowid);
+  if (task?.id) logTask(task.id, 'approval_requested', `#${id} ${truncate(detail, 300)}`);
+  bus.emit('approval:created', { task: task || { id: null, title: tool, business_id: businessId }, ids: [id], items: [detail] });
+  return q.get('SELECT * FROM approvals WHERE id = ?', id);
+}
+
+// Approved actions run in the background (dynamic import: no import cycle with the agents/tools); rejected ones are
+// cancelled.
+function afterDecision(rows) {
+  for (const a of rows) {
+    if (!a?.action) continue;
+    if (a.status === 'approved') {
+      import('../agents/actions.js').then((m) => m.runApprovedAction(a.id)).catch(() => {});
+    } else {
+      q.run("UPDATE approvals SET action_status = 'cancelled', action_at = ? WHERE id = ? AND action_status = 'waiting'", now(), a.id);
+    }
+  }
+}
+
 export function listApprovals({ status = null, businessId, limit = 100 } = {}) {
   const where = [];
   const vals = [];
@@ -91,7 +122,11 @@ export function listApprovals({ status = null, businessId, limit = 100 } = {}) {
     `SELECT a.*, b.name AS business_name FROM approvals a LEFT JOIN businesses b ON b.id = a.business_id
      ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY a.status = 'pending' DESC, a.id DESC LIMIT ?`,
     ...vals, limit
-  ).map((a) => ({ ...a, ...classifyApproval(a.detail) }));
+  ).map((a) => ({
+    ...a,
+    ...(a.action ? { important: true, category: 'Aksi' } : classifyApproval(a.detail)),
+    action: a.action ? json(a.action, null) : null,
+  }));
 }
 
 function checkDecision(decision) {
@@ -113,13 +148,15 @@ export function decideApproval(id, decision, by, note = '') {
     e.statusCode = 404;
     throw e;
   }
-  return q.get('SELECT * FROM approvals WHERE id = ?', id);
+  const row = q.get('SELECT * FROM approvals WHERE id = ?', id);
+  afterDecision([row]);
+  return row;
 }
 
 /**
  * Bulk decision: one decision and note for many approvals, in one transaction. Only items that are still pending
  * are decided; the rest are reported back as skipped (already decided elsewhere, or deleted), so a stale selection
- * never overwrites an earlier decision. Like the single decision, nothing is executed.
+ * never overwrites an earlier decision. Approved items that carry an action run it afterwards (one by one).
  */
 export function decideApprovals(ids, decision, by, note = '') {
   checkDecision(decision);
@@ -141,6 +178,7 @@ export function decideApprovals(ids, decision, by, note = '') {
       }
     }
   });
+  afterDecision(decided);
   return { decided, skipped };
 }
 

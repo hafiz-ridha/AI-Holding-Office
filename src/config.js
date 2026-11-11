@@ -43,6 +43,9 @@ export const config = {
   webTrendsRss: env.WEB_TRENDS_RSS_URL || 'https://trends.google.com/trending/rss',
   webWikiApi: env.WEB_WIKI_API_URL || 'https://id.wikipedia.org/w/api.php',
   webAllowPrivate: bool(env.WEB_ALLOW_PRIVATE, false),
+  // Google (Drive connection, OAuth device flow). Overridable for tests (local stand-ins).
+  googleOAuthBase: (env.GOOGLE_OAUTH_BASE || 'https://oauth2.googleapis.com').replace(/\/+$/, ''),
+  googleApiBase: (env.GOOGLE_API_BASE || 'https://www.googleapis.com').replace(/\/+$/, ''),
   disableBackgroundJobs: bool(env.DISABLE_BACKGROUND_JOBS, false),
   queueIntervalMs: int(env.QUEUE_INTERVAL_MS, 5000),
   apiRateLimitPerMin: int(env.API_RATE_LIMIT_PER_MIN, 300),

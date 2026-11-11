@@ -361,3 +361,29 @@ kode di dalam prosa tidak diubah. `cleanError()` mengganti badan JSON di pesan e
   memakai `readable()`/`cleanError()`, jadi hasil lama yang tersimpan sebagai JSON juga tampil natural.
 - `src/telegram/format.js`: siapa yang berbicara (`speaker`, `personEmoji`), warna topik, dan `chatHtml()` (JSON →
   teks → HTML Telegram). Notifikasi tugas ditulis seperti pesan chat: pembicara, judul, isi, lalu model sebagai footer.
+
+### Agen, alat, dan koneksi (Tahap 1 ala OpenClaw)
+
+Migrasi `009_agents.sql`: `connections` (satu baris per layanan, rahasia di `secret_enc`), `artifacts` (indeks file di
+layanan luar), dan kolom aksi di `approvals` (`action`, `action_status`, `action_result`, `action_at`).
+
+- **Loop agen** (`src/agents/agent.js`): `runWork` → `runAgent()` bila `agent_enabled` dan ada alat. Protokol teks
+  `<tool_call>{"name","args"}</tool_call>` (tanpa function calling provider), satu alat per balasan, hasil alat dikirim
+  balik sebagai DATA. Berjalan di dalam satu `executeTask` (kantor tetap "working"). Batas `agent_max_steps`; anggaran
+  `agent_max_tokens` (dibaca ulang dari DB tiap langkah); anggaran hampir habis → jawaban akhir. Log `tool_*` di tugas.
+- **Registry alat** (`src/agents/tools/`): `{name, description, args, risk safe|important, connector, run, describe?}`,
+  validator argumen sendiri, `toolsFor()` hanya alat yang koneksinya aktif.
+- **Aksi penting**: `createActionApproval()` (`src/holding/approvals.js`) menyimpan alat + argumen; `decideApproval(s)`
+  memicu `runApprovedAction()` (`src/agents/actions.js`, impor dinamis) yang mengklaim baris secara atomik, memvalidasi
+  ulang, menjalankan alat, lalu emit `action:finished` (obrolan & Telegram). Ditolak → `cancelled`.
+- **Koneksi** (`src/connections/store.js`): rahasia JSON terenkripsi `encryptSecret`, tidak pernah keluar dari server.
+- **Google Drive** (`src/connections/google.js`): OAuth device flow (`/device/code`, polling `/token`, scope `drive.file`),
+  refresh token terenkripsi, access token di memori, `invalid_grant` → `expired` + `system:alert`. Menghubungkan akun lain
+  tidak memutus koneksi lama sampai yang baru diizinkan. Folder `AI Office/<bisnis>/<Dokumen|Laporan>`, Markdown →
+  HTML (`src/lib/markdown.js`) diunggah multipart sebagai Google Docs; perbarui, ekspor teks, bagikan, Sampah.
+- **Indeks & simpan otomatis** (`src/connections/artifacts.js`): `done()` di orchestrator mencoba menyimpan laporan dan
+  hasil kerja panjang sebelum `finish()` (agar tautan ikut di notifikasi); gagal → `pending` dengan isi Markdown, diulang
+  scheduler dengan jeda bertambah, maks 5 kali. Tautan dipakai notifier, obrolan, topik tim, detail tugas, menu File.
+- **Aturan dasar karyawan**: `seed()` mengganti baris lama "tidak dapat mengeksekusi tindakan" sekali (flag
+  `_tool_rule_v1`, hanya teks yang persis sama).
+- Tes: `test/mock-google.js` meniru OAuth & Drive v3; `config.googleOAuthBase` / `googleApiBase` diarahkan ke sana.

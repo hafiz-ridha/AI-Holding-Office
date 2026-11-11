@@ -1,6 +1,8 @@
 import { get, post } from '../api.js';
 import { h, mount, badge, fmtDate, fmtNum, taskCode, md, toast, errToast, confirmDialog, KIND_LABEL, PRIORITY, modelNote, taskModelInfo } from '../ui.js';
 
+const AGENT_EVENT = { tool_call: 'Memakai alat', tool_result: 'Hasil', tool_error: 'Gagal', tool_limit: 'Batas', approval_requested: 'Minta persetujuan', action_done: 'Aksi dijalankan', action_failed: 'Aksi gagal' };
+
 const LEVEL = { holding: 'Holding task', business: 'Business task', employee: 'Employee subtask' };
 
 export async function render(root, [id], ctx) {
@@ -62,6 +64,23 @@ export async function render(root, [id], ctx) {
         h('div', { class: 'card' }, h('div', { class: 'card-head' }, h('h3', null, 'Output'), t.result ? h('button', { class: 'btn btn-sm', type: 'button', onclick: () => navigator.clipboard?.writeText(t.result).then(() => toast('Disalin', 'ok')) }, 'Salin') : null),
           t.result ? h('div', { class: 'result-box' }, md(t.result)) : h('p', { class: 'muted' }, active ? 'Sedang dikerjakan…' : 'Belum ada hasil.'),
           t.result ? modelNote(taskModelInfo(t), { open: true }) : null),
+        // Files this task stored outside (Google Drive, ...).
+        d.files?.length
+          ? h('div', { class: 'card' }, h('h3', null, `File di layanan luar (${d.files.length})`),
+              d.files.map((f) => h('div', { class: 'list-item' },
+                h('div', { class: 'grow' }, f.url ? h('a', { href: f.url, target: '_blank', rel: 'noopener noreferrer' }, `📄 ${f.title}`) : `📄 ${f.title}`,
+                  h('div', { class: 'small muted' }, `${f.provider === 'google_drive' ? 'Google Drive' : f.provider}${f.source === 'auto' ? ' · simpan otomatis' : ' · disimpan agen'}${f.error && f.status !== 'synced' ? ` · ${f.error}` : ''}`)),
+                h('span', { class: `badge ${f.status === 'synced' ? 'b-completed' : f.status === 'failed' ? 'b-failed' : 'b-pending'}` },
+                  { synced: 'Tersimpan', pending: 'Menunggu unggah', failed: 'Gagal' }[f.status] || f.status))),
+              h('a', { href: '#/files', class: 'small' }, 'Semua file →'))
+          : null,
+        // What the agent did step by step (tools, approvals it asked for, actions run after approval).
+        d.agent_steps?.length
+          ? h('details', { class: 'card', open: true }, h('summary', null, h('strong', null, `Langkah agen (${d.agent_steps.filter((x) => x.event === 'tool_call').length} alat)`),
+              h('span', { class: 'small muted' }, ' · alat yang dipakai karyawan AI dan hasilnya')),
+              h('ol', { class: 'timeline small' }, d.agent_steps.map((x) => h('li', { class: x.level === 'warn' ? 'warn' : null },
+                h('span', { class: 'muted' }, `${fmtDate(x.created_at)} · ${AGENT_EVENT[x.event] || x.event}: `), x.message))))
+          : null,
         // Sources from the automatic web research that the AI was given (cited as [W1], [W2], ...).
         t.web_refs?.length
           ? h('details', { class: 'card', open: true }, h('summary', null, h('strong', null, `Sumber web (${t.web_refs.length})`), h('span', { class: 'small muted' }, ' · diambil otomatis sebelum AI bekerja, dikutip sebagai [W1], [W2], …')),
@@ -70,7 +89,7 @@ export async function render(root, [id], ctx) {
                 h('span', { class: 'muted' }, [r.source, r.date ? fmtDate(Date.parse(r.date)) : ''].filter((x) => x && x !== '-').map((x) => ` · ${x}`).join(''))))))
           : null,
         d.approvals.length
-          ? h('div', { class: 'card' }, h('h3', null, 'Persetujuan owner'), d.approvals.map((a) => h('div', { class: 'list-item' }, h('div', { class: 'grow' }, a.detail), badge(a.status))), h('a', { href: '#/approvals', class: 'small' }, 'Kelola di Approvals →'))
+          ? h('div', { class: 'card' }, h('h3', null, 'Persetujuan owner'), d.approvals.map((a) => h('div', { class: 'list-item' }, h('div', { class: 'grow' }, a.is_action ? h('span', { class: 'cat-chip imp' }, 'Aksi') : null, ' ', a.detail, a.action_result ? h('div', { class: 'small muted' }, `${{ done: 'Dijalankan', failed: 'Gagal', cancelled: 'Dibatalkan' }[a.action_status] || ''}: ${a.action_result}`) : null), badge(a.status))), h('a', { href: '#/approvals', class: 'small' }, 'Kelola di Approvals →'))
           : null,
         // Flags the AI raised that are only information / data requests: no owner approval needed (kept for reference).
         d.logs.some((l) => l.event === 'approval_skipped')

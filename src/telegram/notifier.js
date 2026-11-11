@@ -7,6 +7,7 @@ import { getTelegramRow, getClient } from './settings.js';
 import { getEmployee } from '../agents/employees.js';
 import { cleanError } from '../lib/readable.js';
 import { speaker, chatHtml } from './format.js';
+import { fileLines } from '../connections/artifacts.js';
 
 const ALERT_THROTTLE_MS = 30 * 60_000;
 const lastAlert = new Map();
@@ -128,7 +129,14 @@ const code = (t) => `T-${String(t.id).padStart(5, '0')}`;
 // Small reference line under the title: task code and business.
 function ref(task) {
   const b = task?.business_id ? q.get('SELECT name FROM businesses WHERE id = ?', task.business_id) : null;
-  return `<i>${code(task)}${b ? ` · ${escapeHtml(b.name)}` : ''}</i>`;
+  const parts = [task?.id ? code(task) : null, b ? escapeHtml(b.name) : null].filter(Boolean);
+  return parts.length ? `<i>${parts.join(' · ')}</i>` : '';
+}
+
+// Files the task stored outside (Google Drive, ...), as links.
+function files(task) {
+  const f = task?.id ? fileLines(task.id) : [];
+  return f.length ? `\n\n${f.map((x) => `📄 <a href="${escapeHtml(x.url)}">${escapeHtml(x.title)}</a>`).join('\n')}` : '';
 }
 
 function onStarted({ task }) {
@@ -152,7 +160,7 @@ function onCompleted({ task }) {
   const body = chatHtml(task.result, { max: 1500, code: '[kode]' });
   enqueue(
     'task_completed',
-    `${who(task)}✅ Tugas selesai: <b>${escapeHtml(task.title)}</b>\n${ref(task)}${body ? `\n\n${body}` : ''}${modelLine(task)}`
+    `${who(task)}✅ Tugas selesai: <b>${escapeHtml(task.title)}</b>\n${ref(task)}${body ? `\n\n${body}` : ''}${files(task)}${modelLine(task)}`
   );
 }
 
@@ -167,11 +175,25 @@ function onFailed({ task, error }) {
 // Owner approval requests are always notified when system alerts are enabled (they need a human decision).
 function onApproval({ task, ids, items }) {
   if (!ready('notify_system_alert')) return;
+  const actions = ids.length ? q.get(`SELECT COUNT(*) n FROM approvals WHERE action IS NOT NULL AND id IN (${ids.map(() => '?').join(',')})`, ...ids).n : 0;
   enqueue(
     'approval',
     `${who(task)}🔔 <b>Persetujuan owner dibutuhkan</b> untuk ${escapeHtml(task.title)}\n${ref(task)}\n\n` +
       items.map((it, i) => `• #${ids[i] ?? '-'} ${escapeHtml(truncate(it, 300))}`).join('\n') +
-      '\n\nPutuskan di dashboard → Approvals. AI tidak mengeksekusi tindakan apa pun.'
+      (actions
+        ? '\n\nAksi ini baru dijalankan setelah Anda setujui di dashboard → Approvals.'
+        : '\n\nPutuskan di dashboard → Approvals. Keputusan hanya dicatat; tidak ada aksi yang dijalankan.')
+  );
+}
+
+// An approved action ran (or failed).
+function onActionFinished({ approval, ok, result, task, employee }) {
+  if (!ready('notify_system_alert')) return;
+  const head = employee ? `${speaker(employee)}\n` : '';
+  enqueue(
+    'action',
+    `${head}${ok ? '✅ <b>Aksi disetujui sudah dijalankan</b>' : '❌ <b>Aksi gagal dijalankan</b>'}\n${escapeHtml(truncate(approval.detail, 300))}\n` +
+      `<i>#${approval.id}${task?.id ? ` · ${code(task)}` : ''}</i>\n\n${chatHtml(cleanError(result), { max: 800 })}`
   );
 }
 
@@ -190,6 +212,7 @@ export function startNotifier(logger) {
   bus.on('task:failed', onFailed);
   bus.on('system:alert', onAlert);
   bus.on('approval:created', onApproval);
+  bus.on('action:finished', onActionFinished);
 }
 
 export function stopNotifier() {
@@ -198,6 +221,7 @@ export function stopNotifier() {
   bus.off('task:failed', onFailed);
   bus.off('system:alert', onAlert);
   bus.off('approval:created', onApproval);
+  bus.off('action:finished', onActionFinished);
 }
 
 export function resetAlertThrottle() {

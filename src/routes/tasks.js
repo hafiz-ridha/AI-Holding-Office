@@ -1,3 +1,4 @@
+import { artifactsForTask } from '../connections/artifacts.js';
 import { q } from '../db/index.js';
 import { getTask, taskPublic, cancelTask, retryTask, STATUSES } from '../queue/tasks.js';
 import { createOwnerTask } from '../holding/taskFactory.js';
@@ -132,7 +133,9 @@ export default async function taskRoutes(app) {
         t.id
       ),
       usage: q.all('SELECT provider_name, model, purpose, ok, http_status, error, tokens_in, tokens_out, estimated, cost_usd, latency_ms, created_at FROM usage_logs WHERE task_id = ? ORDER BY id', t.id),
-      approvals: q.all('SELECT id, detail, status, decided_at FROM approvals WHERE task_id = ?', t.id),
+      approvals: q.all('SELECT id, detail, status, decided_at, action IS NOT NULL AS is_action, action_status, action_result FROM approvals WHERE task_id = ?', t.id),
+      files: artifactsForTask(t.id),
+      agent_steps: q.all("SELECT level, event, message, created_at FROM task_logs WHERE task_id = ? AND event IN ('tool_call','tool_result','tool_error','tool_limit','approval_requested','action_done','action_failed') ORDER BY id", t.id),
     };
   });
 

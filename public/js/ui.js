@@ -172,7 +172,7 @@ export function emptyState(text, action) {
 // ---------- safe markdown ----------
 function inline(text) {
   const frag = document.createDocumentFragment();
-  const re = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|\[[^\]]+\]\((https?:\/\/[^)\s]+)\))/g;
+  const re = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|\[[^\]]+\]\((https?:\/\/[^)\s]+)\)|https?:\/\/[^\s<>()]*[^\s<>().,;:!?'"])/g;
   let last = 0;
   let m;
   while ((m = re.exec(text))) {
@@ -183,7 +183,8 @@ function inline(text) {
     else if (t.startsWith('[')) {
       const label = t.slice(1, t.indexOf(']'));
       frag.append(h('a', { href: m[2], target: '_blank', rel: 'noopener noreferrer nofollow' }, label));
-    } else frag.append(h('em', null, t.slice(1, -1)));
+    } else if (/^https?:\/\//.test(t)) frag.append(h('a', { href: t, target: '_blank', rel: 'noopener noreferrer nofollow' }, t));
+    else frag.append(h('em', null, t.slice(1, -1)));
     last = m.index + t.length;
   }
   if (last < text.length) frag.append(text.slice(last));

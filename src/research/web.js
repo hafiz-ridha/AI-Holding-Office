@@ -221,7 +221,7 @@ export async function searchWiki(query, max = 1) {
   });
 }
 
-async function readPage(link, max) {
+export async function readPage(link, max) {
   return cached(`page:${link}`, async () => {
     const r = await fetchText(link, { maxBytes: 600_000, timeoutMs: 7000 });
     return pageText(r.text, max);

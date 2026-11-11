@@ -162,14 +162,26 @@ test('paused queue does not pick up work; resume does', async () => {
   await waitFor(() => tasks.getTask(t.id).status === 'completed');
 });
 
-test('token budget per task is enforced', async () => {
+test('token budget per task is enforced (one plain call, and agent tasks with their own budget)', async () => {
   svc.createProvider({ preset: 'custom', name: 'Mock', base_url: mock.baseUrl, api_key: 'test-key', default_model: 'ok-model' });
-  settings.setSetting('max_tokens_per_task', 500);
   const sec = q.get("SELECT id FROM employees WHERE slug = 'secretary'").id;
-  const t = tasks.createTask({ kind: 'direct', title: 'Panjang', description: 'x'.repeat(4000), employeeId: sec });
-  const f = await waitFor(() => tasks.getTask(t.id).status === 'failed' && tasks.getTask(t.id));
-  assert.match(f.error, /Batas token/);
-  settings.setSetting('max_tokens_per_task', 12000);
+  settings.setSetting('max_tokens_per_task', 500);
+  settings.setSetting('agent_enabled', false);
+  try {
+    const t = tasks.createTask({ kind: 'direct', title: 'Panjang', description: 'x'.repeat(4000), employeeId: sec });
+    const f = await waitFor(() => tasks.getTask(t.id).status === 'failed' && tasks.getTask(t.id));
+    assert.match(f.error, /Batas token per pekerjaan \(500\)/);
+    // Tasks that may use tools (several AI calls) have their own, larger budget: agent_max_tokens.
+    settings.setSetting('agent_enabled', true);
+    settings.setSetting('agent_max_tokens', 2000);
+    const t2 = tasks.createTask({ kind: 'direct', title: 'Panjang agen', description: 'x'.repeat(9000), employeeId: sec });
+    const f2 = await waitFor(() => tasks.getTask(t2.id).status === 'failed' && tasks.getTask(t2.id));
+    assert.match(f2.error, /Batas token per pekerjaan \(2000\)/);
+  } finally {
+    settings.setSetting('max_tokens_per_task', 12000);
+    settings.setSetting('agent_enabled', true);
+    settings.setSetting('agent_max_tokens', 40000);
+  }
 });
 
 test('restart recovery re-queues interrupted tasks', () => {

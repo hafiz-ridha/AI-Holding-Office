@@ -21,11 +21,12 @@ import { businessContextText, holdingOverviewText, canAccessBusiness } from '../
 import { saveReport } from '../holding/reports.js';
 import { createApprovalsFromResult } from '../holding/approvals.js';
 import { research, needsWeb } from '../research/web.js';
+import { runAgent } from './agent.js';
+import { autoSaveTask } from '../connections/artifacts.js';
 
 export class BudgetError extends Error {}
 
-function outputBudget(task, employee, messages) {
-  const budget = getSetting('max_tokens_per_task');
+function outputBudget(task, employee, messages, budget = getSetting('max_tokens_per_task')) {
   const used = (task.tokens_in || 0) + (task.tokens_out || 0);
   const input = estimateMessagesTokens(messages);
   const cap = employee?.max_tokens > 0 ? employee.max_tokens : getSetting('max_output_tokens');
@@ -36,7 +37,7 @@ function outputBudget(task, employee, messages) {
   return Math.min(cap, remaining);
 }
 
-async function callAI({ task, employee, messages, purpose, signal }) {
+async function callAI({ task, employee, messages, purpose, signal, budget }) {
   const need = detectNeed({ purpose, task, employee, inputTokens: estimateMessagesTokens(messages) });
   const res = await routeChat({
     messages,
@@ -44,7 +45,7 @@ async function callAI({ task, employee, messages, purpose, signal }) {
     taskId: task.id,
     businessId: task.business_id ?? null,
     purpose,
-    maxTokens: outputBudget(task, employee, messages),
+    maxTokens: outputBudget(task, employee, messages, budget),
     temperature: employee?.temperature ?? 0.7,
     signal,
     need,
@@ -104,6 +105,13 @@ function finish(task, employee, content, { report = null } = {}) {
   return done;
 }
 
+// Finish with the files stored outside first (Google Drive when connected), so their links are known when the
+// completion is announced (chat, Telegram). Saving never blocks finishing the task.
+async function done(task, employee, content, opts = {}) {
+  await autoSaveTask(task, employee, content, { report: opts.report || null });
+  return finish(task, employee, content, opts);
+}
+
 function pick(list, key) {
   const k = String(key || '').toLowerCase().trim();
   if (!k) return null;
@@ -133,7 +141,7 @@ async function planHolding(task, signal) {
     const answer = plan ? planAnswer(plan, res.content) : readable(res.content);
     savePlan(task.id, { analysis: plan?.analysis ?? null, direct_answer: answer, business_tasks: [], shared_tasks: [] });
     memo(ceo, task, answer, 2);
-    return finish(task, ceo, answer, { report: 'holding' });
+    return done(task, ceo, answer, { report: 'holding' });
   }
 
   const bySlug = new Map(businesses.map((b) => [b.slug, b]));
@@ -185,7 +193,7 @@ async function planHolding(task, signal) {
     const answer = planAnswer(plan, res.content);
     savePlan(task.id, { analysis: plan.analysis ?? null, direct_answer: answer, business_tasks: [], shared_tasks: [] });
     memo(ceo, task, answer, 2);
-    return finish(task, ceo, answer, { report: 'holding' });
+    return done(task, ceo, answer, { report: 'holding' });
   }
   savePlan(task.id, { analysis: plan.analysis ?? null, children: created });
   setPhase(task.id, 'executing');
@@ -208,7 +216,7 @@ async function synthesizeHolding(task, signal) {
   const res = await callAI({ task, employee: ceo, messages, purpose: 'synthesis', signal });
   const content = readable(res.content);
   memo(ceo, task, content, 2);
-  return finish(task, ceo, content, { report: 'holding' });
+  return done(task, ceo, content, { report: 'holding' });
 }
 
 // ---------------- Level 2: Business Manager ----------------
@@ -237,7 +245,7 @@ async function planBusiness(task, signal) {
     const answer = plan ? planAnswer(plan, res.content) : readable(res.content);
     savePlan(task.id, { analysis: plan?.analysis ?? null, direct_answer: answer, subtasks: [] });
     memo(bm, task, answer, 2);
-    return finish(task, bm, answer, { report: 'business' });
+    return done(task, bm, answer, { report: 'business' });
   }
   const created = [];
   for (const s of subtasks) {
@@ -270,7 +278,7 @@ async function synthesizeBusiness(task, signal) {
   const res = await callAI({ task, employee: bm, messages, purpose: 'synthesis', signal });
   const content = readable(res.content);
   memo(bm, task, content, 2);
-  return finish(task, bm, content, { report: 'business' });
+  return done(task, bm, content, { report: 'business' });
 }
 
 // ---------------- Level 3: employee ----------------
@@ -304,12 +312,18 @@ async function runWork(task, signal) {
     knowledge: brain(task, employee),
     web: await webFor(task),
   });
-  const res = await callAI({ task, employee, messages, purpose: 'work', signal });
+  // As an agent (tools: web, Second Brain, Google Drive, ...) when tools are available; otherwise one AI call.
+  const agentBudget = Math.max(getSetting('max_tokens_per_task'), getSetting('agent_max_tokens'));
+  const agentAnswer = await runAgent({
+    task, employee, messages, signal, budget: agentBudget,
+    call: (o) => callAI({ ...o, purpose: 'work', budget: agentBudget }),
+  });
+  const raw = agentAnswer ?? (await callAI({ task, employee, messages, purpose: 'work', signal })).content;
   // Answers are for people: JSON becomes natural text, unless the owner asked for JSON.
-  const content = ASKS_JSON.test(`${task.title} ${task.description}`) ? res.content : readable(res.content);
+  const content = ASKS_JSON.test(`${task.title} ${task.description}`) ? raw : readable(raw);
   // Quick chat replies are conversation, not work: kept in the chat history only, not in working memory.
   if (!isChatReply(task)) memo(employee, task, content);
-  return finish(task, employee, content);
+  return done(task, employee, content);
 }
 
 export async function executeTask(task, signal) {

@@ -98,6 +98,31 @@ export async function startMockProvider({ key = 'test-key', delayMs = 0 } = {}) 
       if (/PLAN_TRUNCATED/.test(lastUser) && /RENCANA_HOLDING_JSON/.test(lastUser)) {
         content = '{"analysis": "Tren minggu ini", "direct_answer": "Tren kopi susu naik 20% dan pelanggan baru banyak datang dari Instagram, sehingga';
       }
+      // Agent scenarios (tool calls with the <tool_call> protocol). The task text is in the first user message; tool
+      // results come back as later user messages.
+      const userText = data.messages.filter((x) => x.role === 'user').map((x) => x.content).join('\n');
+      const finalAsked = /Batas langkah alat tercapai/.test(lastUser);
+      if (/AGENT_DOC/.test(userText)) {
+        if (/Hasil alat drive_simpan_dokumen/.test(lastUser)) content = `SOP sudah saya simpan di Google Drive: ${(lastUser.match(/https?:\/\/\S+/) || ['-'])[0]}`;
+        else if (/RAWNL/.test(userText)) content = 'Saya simpan dulu.\n<tool_call>{"name": "drive_simpan_dokumen", "args": {"judul": "Catatan Rapat", "isi": "# Notulen\n- Harga naik\n- Promo bundling"}}</tool_call>';
+        else if (/DRAFT_BEFORE/.test(userText)) content = '# Rencana Promo\n\nPromo bundling kopi + roti setiap akhir pekan selama satu bulan, target 50 paket per minggu.\n\n<tool_call>{"name": "drive_simpan_dokumen", "args": {"judul": "Rencana Promo"}}</tool_call>';
+        else content = 'Berikut SOP-nya.\n\n<tool_call>{"name": "drive_simpan_dokumen", "args": {"judul": "SOP Barista", "isi": "# SOP Barista\\n\\n1. Cuci tangan\\n2. Kalibrasi grinder\\n\\n**Wajib** setiap pagi."}}</tool_call>';
+      }
+      if (/AGENT_SHARE/.test(userText)) {
+        const file = (userText.match(/file=(#\d+)/) || [])[1] || '#0';
+        content = /Menunggu persetujuan owner/.test(lastUser) ? 'Permintaan berbagi menunggu persetujuan owner.'
+          : `<tool_call>{"name": "drive_bagikan", "args": {"file": "${file}", "email": "budi@example.com"}}</tool_call>`;
+      }
+      if (/AGENT_READ/.test(userText)) {
+        const file = (userText.match(/file=(#\d+)/) || [])[1] || '#0';
+        content = /drive_baca/.test(lastUser) || /gagal/.test(lastUser) ? `Selesai membaca: ${lastUser.slice(0, 200)}` : `<tool_call>{"name": "drive_baca", "args": {"file": "${file}"}}</tool_call>`;
+      }
+      if (/AGENT_BADTOOL/.test(userText)) {
+        content = /tidak tersedia/.test(lastUser) ? 'Jawaban akhir tanpa alat.' : '<tool_call>{"name": "hapus_semua_data", "args": {}}</tool_call>';
+      }
+      if (/AGENT_LOOP/.test(userText)) {
+        content = finalAsked ? 'Selesai setelah batas langkah.' : '<tool_call>{"name": "catatan_cari", "args": {"query": "kopi"}}</tool_call>';
+      }
       // Old habit: "DATA NOT AVAILABLE" in every section.
       if (/DNA_REPORT/.test(lastUser) && !/RENCANA_/.test(lastUser)) {
         content = '## Ringkasan\nPenjualan stabil. Omzet: DATA NOT AVAILABLE.\n\n## Hasil Utama\nDATA NOT AVAILABLE\n\n## Peluang\n- DATA NOT AVAILABLE\n\n## Rekomendasi\n- Uji paket bundling (estimasi harga pasar Rp25.000–35.000 [W1]).';

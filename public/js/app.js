@@ -17,9 +17,11 @@ const ROUTES = [
   { path: 'tasks', label: 'Task Manager', icon: '☰', load: () => import('./views/tasks.js') },
   { path: 'task', hidden: true, label: 'Detail Tugas', load: () => import('./views/task.js') },
   { path: 'employees', label: 'AI Employees', icon: '☺', load: () => import('./views/employees.js') },
+  { path: 'files', label: 'File', icon: '🗀', load: () => import('./views/files.js') },
   { group: 'Konfigurasi' },
   { path: 'providers', label: 'AI Providers', icon: '⚡', load: () => import('./views/providers.js') },
   { path: 'telegram', label: 'Telegram', icon: '✈', load: () => import('./views/telegram.js') },
+  { path: 'connections', label: 'Koneksi', icon: '⇄', load: () => import('./views/connections.js') },
   { path: 'settings', label: 'Settings', icon: '⚙', load: () => import('./views/settings.js') },
 ];
 

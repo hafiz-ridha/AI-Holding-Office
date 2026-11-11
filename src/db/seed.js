@@ -11,9 +11,14 @@ import { backfillKnowledge } from '../holding/knowledge.js';
 const OLD_DATA_LINE = 'Jangan mengarang fakta, angka, data bisnis, atau sumber. Jika data tidak tersedia, tulis "DATA NOT AVAILABLE" dan sarankan cara memperolehnya.';
 const DATA_LINE = 'Jangan mengarang fakta, angka, data bisnis, atau sumber. Jika data internal belum ada, pakai hasil riset web dan pengetahuan umummu (patokan industri, kisaran pasar, tren) sebagai estimasi yang ditandai jelas, dan sebut sekali saja data apa yang belum ada.';
 
+// The action rule in the base rules. v1: text only, never acts. Now the AI may act through the server's tools; important
+// actions wait for the owner's approval. Updated once by seed() like the data rule.
+const OLD_ACT_LINE = 'Kamu hanya menghasilkan teks (analisis, rencana, draf, kode). Kamu TIDAK dapat mengeksekusi tindakan apa pun.';
+const ACT_LINE = 'Kamu bertindak hanya lewat alat yang disediakan server (bila ada); selain itu kamu menghasilkan teks (analisis, rencana, draf, kode). Aksi penting baru dijalankan setelah owner menyetujuinya. Jangan pernah mengaku sudah melakukan aksi yang tidak kamu jalankan lewat alat.';
+
 const SAFETY = `
 Aturan kerja:
-- Kamu hanya menghasilkan teks (analisis, rencana, draf, kode). Kamu TIDAK dapat mengeksekusi tindakan apa pun.
+- ${ACT_LINE}
 - Jika rekomendasi melibatkan tindakan berisiko (menghapus file/data, mengubah server, mengirim email/pesan, transaksi keuangan), tulis di baris tersendiri yang diawali "PERLU PERSETUJUAN ADMIN:" dan jangan menganggapnya sudah dilakukan.
 - ${DATA_LINE}
 - Gunakan hanya konteks bisnis yang diberikan pada tugas ini.
@@ -207,6 +212,13 @@ export async function seed(log = console) {
     const n = q.run('UPDATE employees SET system_prompt = replace(system_prompt, ?, ?) WHERE instr(system_prompt, ?) > 0', OLD_DATA_LINE, DATA_LINE, OLD_DATA_LINE).changes;
     setFlag('_data_rule_v2');
     if (n) log.info?.(`Aturan data diperbarui pada ${n} karyawan (estimasi dari riset web & pengetahuan umum)`);
+  }
+
+  // Action rule v1 (agents with tools), same way.
+  if (!flag('_tool_rule_v1')) {
+    const n = q.run('UPDATE employees SET system_prompt = replace(system_prompt, ?, ?) WHERE instr(system_prompt, ?) > 0', OLD_ACT_LINE, ACT_LINE, OLD_ACT_LINE).changes;
+    setFlag('_tool_rule_v1');
+    if (n) log.info?.(`Aturan aksi diperbarui pada ${n} karyawan (agen dengan alat)`);
   }
 
   // Second Brain (migration 005): turn work finished before the upgrade into knowledge notes, once.

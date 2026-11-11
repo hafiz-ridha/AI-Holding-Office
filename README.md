@@ -29,7 +29,9 @@ Dokumentasi:
 | Telegram | Laporan harian holding (sekali per hari, tahan restart; dikirim per bagian seperti chat natural, dengan "mengetik…"), notifikasi tugas/error/persetujuan, perintah `/overview /companies /business <slug> /report /tasks /finance /approvals /task /setchat /pause /resume` |
 | Kantor virtual | Pixel art top-down orisinal: Kantor Pusat (CEO Office, Meeting Room, Business Managers, Finance, Secretary, Research, Developer, HR, Marketing, Lounge) + satu kantor per bisnis (otomatis dari database). State IDLE/THINKING/WORKING/WALKING/MEETING/COMPLETED/ERROR (+ RESTING dari riwayat tugas) mengikuti data tugas nyata; klik karakter, meja, atau ruangan untuk detail; status bar, notifikasi, siang/malam, minimap |
 | Riset web | Data terbaru dari internet (Google News, Google Trends, Wikipedia, DuckDuckGo) diberikan ke AI sebagai sumber bernomor, tanpa API key; approval owner hanya untuk tindakan penting |
-| Keamanan | Login scrypt, sesi HttpOnly, CSRF, rate limit, CSP ketat (koneksi keluar dari browser hanya ke Open-Meteo untuk cuaca otomatis), API key terenkripsi AES-256-GCM, whitelist Telegram, audit log, persetujuan owner untuk tindakan berisiko, bisa diputuskan satu per satu atau sekaligus (AI tidak pernah mengeksekusi tindakan) |
+| Agen & alat | Karyawan AI bekerja seperti agen (ala OpenClaw): memakai alat dalam beberapa langkah (cari & baca web, Second Brain, Google Drive). Aksi aman langsung jalan; aksi penting (membagikan/menghapus file) menunggu persetujuan owner lalu dijalankan server |
+| File di layanan luar | Dokumen & laporan hasil kerja tersimpan sebagai Google Docs di Google Drive (Gmail pribadi, dihubungkan dengan kode perangkat); AI Office menyimpan daftar & tautannya (menu **File**). Tahap berikutnya: GitHub, Vercel/Netlify, Supabase |
+| Keamanan | Login scrypt, sesi HttpOnly, CSRF, rate limit, CSP ketat (koneksi keluar dari browser hanya ke Open-Meteo untuk cuaca otomatis), API key & token koneksi terenkripsi AES-256-GCM, whitelist Telegram, audit log, persetujuan owner untuk tindakan berisiko (satu per satu atau sekaligus); aksi agen yang penting hanya dijalankan setelah disetujui |
 
 ## Menjalankan secara lokal
 
@@ -189,12 +191,54 @@ manual. Semua isi template bisa diubah.
 
 Setiap jadwal memakai kuota AI seperti tugas biasa, jadi pilih frekuensi secukupnya untuk provider gratis.
 
+## Agen & Koneksi (ala OpenClaw)
+
+Karyawan AI tidak hanya menulis teks: saat mengerjakan tugas, mereka bisa **memakai alat** dalam beberapa langkah
+(rencana → panggil alat → lihat hasil → lanjut), lalu menulis jawaban akhir.
+
+| Alat | Jalan | Isi |
+|---|---|---|
+| `web_cari`, `web_baca` | langsung | cari berita/web dan baca satu halaman publik (lewat pengaman SSRF yang sama dengan riset web) |
+| `catatan_cari` | langsung | cari Second Brain di bisnis yang sama |
+| `drive_simpan_dokumen` | langsung | simpan/perbarui dokumen sebagai Google Docs di folder bisnisnya |
+| `drive_daftar`, `drive_baca` | langsung | lihat dan baca file AI Office milik bisnis itu |
+| `drive_bagikan`, `drive_hapus` | **setelah disetujui** | membagikan file (ke email atau siapa saja dengan tautan) dan memindahkannya ke Sampah |
+
+- Protokolnya teks (`<tool_call>{…}</tool_call>`), jadi bekerja di semua model/provider, termasuk model gratis. Model yang
+  tidak memakai alat tetap menjawab seperti biasa.
+- **Aksi penting** menjadi item di **Approvals** (label *Aksi*) dan Telegram. Setelah Anda **Setujui**, server
+  menjalankannya dan melaporkan hasilnya di kartu, obrolan, dan Telegram. **Tolak** membatalkannya.
+- Langkah-langkah agen terlihat di detail tugas (*Langkah agen*). Pengaturan di **Settings → Agen & alat**: nyala/mati,
+  maksimum langkah (default 6; balasan obrolan 3), dan batas token khusus tugas yang memakai alat (default 40.000).
+- Isolasi bisnis tetap berlaku: alat Drive hanya menyentuh file bisnis tugas itu.
+
+**Google Drive (Gmail pribadi)**: menu **Koneksi**.
+1. Di [Google Cloud Console](https://console.cloud.google.com/): buat project, aktifkan **Google Drive API**, atur layar
+   persetujuan OAuth (External), lalu **Publish app** agar akses tidak kedaluwarsa tiap 7 hari.
+2. Buat OAuth Client tipe **TVs and Limited Input devices**, tempel Client ID & Client Secret di Koneksi, lalu Simpan.
+3. Klik **Hubungkan**, buka `google.com/device`, masukkan kode yang tampil, pilih akun, lalu Izinkan. Tidak perlu domain
+   atau HTTPS di server.
+
+- Izin yang dipakai hanya `drive.file`: AI Office hanya bisa melihat file yang dibuatnya sendiri.
+- Dokumen dan laporan hasil kerja tersimpan otomatis di `AI Office/<Holding (HQ) | nama bisnis>/<Dokumen | Laporan>` sebagai
+  Google Docs, jadi ikut tersinkron di aplikasi Google Drive. Balasan cepat obrolan tidak disimpan; hasil kerja disimpan
+  bila minimal 400 karakter (bisa diatur).
+- Tautan file muncul di detail tugas, menu **File**, obrolan, dan notifikasi Telegram. Unggahan yang gagal diulang otomatis
+  (maks. 5 kali) dan bisa diulang dari menu File.
+- Bila akses dicabut atau kedaluwarsa, status menjadi *Perlu dihubungkan ulang* dan Anda mendapat peringatan di Telegram.
+
+Tahap berikutnya memakai fondasi yang sama: GitHub (kode), website dengan pratinjau & terbit ke Vercel/Netlify (Cloudflare
+Pages & GitHub Pages lewat GitHub), lalu Supabase (database & gambar).
+
 ## Persetujuan owner (Approvals)
 
 Hanya **tindakan penting** yang menunggu keputusan owner di menu **Approvals** dan dikirim ke Telegram. Yang termasuk
 penting: uang (transfer, pembelian, investasi, sewa), kontrak dan hukum (pajak, izin), SDM (rekrut, PHK, gaji), perubahan
 harga atau diskon, publikasi atas nama perusahaan, menghapus atau membagikan data rahasia, dan operasional besar (buka/tutup
-cabang, ganti pemasok). Keputusan hanya dicatat. Aplikasi dan AI tidak pernah mengeksekusi tindakannya.
+cabang, ganti pemasok).
+- **Rekomendasi** dari hasil kerja AI: keputusan hanya dicatat; lakukan tindakannya sendiri bila disetujui.
+- **Aksi** yang diminta agen lewat alat (label *Aksi*): dijalankan server setelah disetujui; aksi yang gagal bisa
+  dijalankan ulang dari kartunya.
 
 - **Informasi biasa** (analisis, rekomendasi, draf, "untuk diketahui") dan **permintaan data** ("mohon admin menambahkan
   data …") tidak menjadi approval. Semua prompt AI melarang meminta owner mengisi data manual. AI diminta memakai data di
@@ -404,12 +448,13 @@ Lihat [docs/DEPLOY-AAPANEL.md](docs/DEPLOY-AAPANEL.md) bagian 8–10. Ringkasnya
 
 ```
 src/            server.js, app.js, config.js, events.js
-  db/           SQLite wrapper, migration runner, migrations/001–008 (*.sql), seed.js
+  db/           SQLite wrapper, migration runner, migrations/001–009 (*.sql), seed.js
   auth/ lib/    sesi, CSRF guard, crypto, zona waktu, settings, rate limit, audit
   providers/    adapter OpenAI-compatible, OpenRouter, 9Router, Cloudflare, Gemini + katalog preset
   router/       Model Router (pemilihan model otomatis, fallback, cooldown, kuota, concurrency)
   holding/      bisnis, dokumen/FTS, Second Brain (knowledge), keuangan, laporan, approval (hanya yang penting), tugas berulang, context (isolasi), task factory
-  agents/       karyawan, prompt, orchestrator holding → bisnis → karyawan
+  agents/       karyawan, prompt, orchestrator holding → bisnis → karyawan, loop agen + alat (tools/), aksi setelah persetujuan
+  connections/  koneksi layanan luar (rahasia terenkripsi), Google Drive (device flow, Docs), indeks file luar
   research/     riset web otomatis untuk AI (Google News/Trends RSS, Wikipedia, DuckDuckGo; SSRF guard, cache)
   queue/        task queue berbasis SQLite + worker
   telegram/     client, bot (long polling), notifier, laporan, grup tim (topik per karyawan)
@@ -418,5 +463,5 @@ src/            server.js, app.js, config.js, events.js
   cli/          reset-password.js
 public/         SPA tanpa build step (HTML + CSS + ES modules + Canvas); assets/office-atlas.png (sprite sheet)
 scripts/        deploy-aapanel.sh (install/update/backup di VPS aaPanel), build-office-atlas.mjs (generator sprite sheet PNG)
-test/           node:test (141 tes) + test/system (restart, beban, RAM)
+test/           node:test (156 tes) + test/system (restart, beban, RAM)
 ```

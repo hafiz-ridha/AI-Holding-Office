@@ -4,6 +4,7 @@ import { q, now, json } from '../db/index.js';
 import { bus } from '../events.js';
 import { truncate } from '../lib/text.js';
 import { readable, cleanError } from '../lib/readable.js';
+import { fileLines } from '../connections/artifacts.js';
 import { getSetting } from '../lib/settings.js';
 import { getTask } from '../queue/tasks.js';
 import { getEmployee, getManager } from '../agents/employees.js';
@@ -206,6 +207,12 @@ function excerpt(text, max = 320) {
   return truncate((m ? m[1] : s).replace(/```[\s\S]*?```/g, '[kode]').trim(), max);
 }
 
+// Links to the files the task stored outside (Google Drive, ...).
+function filesTail(task) {
+  const f = task?.id ? fileLines(task.id) : [];
+  return f.length ? `\n\n${f.map((x) => `📄 [${x.title}](${x.url})`).join('\n')}` : '';
+}
+
 function say(task, e, extra) {
   if (!e) return;
   postMessage({ businessId: task.business_id ?? null, senderType: 'employee', senderEmployeeId: e.id, senderName: e.name, taskId: task.id, ...extra });
@@ -243,16 +250,17 @@ function onCompleted({ task }) {
   const boss = parent ? emp(parent.employee_id) : null;
   if (!parent && fromChat(task) && task.kind === 'direct') {
     // Chat reply to the owner: the actual AI answer.
-    say(task, e, { recipientName: ownerOf(task), kind: 'message', content: truncate(readable(task.result, { fences: true }), MAX_REPLY) });
+    const tail = filesTail(task);
+    say(task, e, { recipientName: ownerOf(task), kind: 'message', content: truncate(readable(task.result, { fences: true }), MAX_REPLY - tail.length) + tail });
     return;
   }
   if (task.kind === 'subtask') {
     say(task, e, { recipientEmployeeId: boss?.id ?? null, recipientName: boss?.name ?? null, kind: 'done', content: `${boss ? `@${boss.name} ` : ''}Selesai: ${task.title}\n${excerpt(task.result, 280)}` });
   } else if (task.kind === 'business') {
     const to = boss ? { recipientEmployeeId: boss.id, recipientName: boss.name } : { recipientName: ownerOf(task) };
-    say(task, e, { ...to, kind: 'report', content: `${boss ? `@${boss.name} ` : ''}Laporan bisnis siap: ${task.title}\n${excerpt(task.result)}` });
+    say(task, e, { ...to, kind: 'report', content: `${boss ? `@${boss.name} ` : ''}Laporan bisnis siap: ${task.title}\n${excerpt(task.result)}${filesTail(task)}` });
   } else {
-    say(task, e, { recipientName: ownerOf(task), kind: 'report', content: `Selesai: ${task.title}\n${excerpt(task.result, 600)}` });
+    say(task, e, { recipientName: ownerOf(task), kind: 'report', content: `Selesai: ${task.title}\n${excerpt(task.result, 600)}${filesTail(task)}` });
   }
 }
 
@@ -272,6 +280,16 @@ function onApproval({ task, items }) {
   say(task, e, { recipientName: 'Owner', kind: 'approval', content: `Butuh persetujuan owner:\n${items.map((i) => `• ${i}`).join('\n')}` });
 }
 
+// An action the owner approved ran: the employee who asked for it reports back.
+function onActionFinished({ approval, ok, result, task, employee }) {
+  if (!employee) return;
+  postMessage({
+    businessId: approval.business_id ?? null, senderType: 'employee', senderEmployeeId: employee.id, senderName: employee.name,
+    taskId: task?.id ?? null, recipientName: 'Owner', kind: ok ? 'message' : 'fail',
+    content: `${ok ? 'Aksi yang Anda setujui sudah saya jalankan' : 'Aksi yang Anda setujui gagal dijalankan'} (#${approval.id}): ${approval.detail}\n${truncate(cleanError(result), 600)}`,
+  });
+}
+
 const handlers = {
   'task:created': onCreated,
   'task:started': onStarted,
@@ -280,6 +298,7 @@ const handlers = {
   'task:failed': onFailed,
   'task:postponed': onPostponed,
   'approval:created': onApproval,
+  'action:finished': onActionFinished,
 };
 const safe = (fn) => (payload) => {
   try {

@@ -3,6 +3,7 @@
 //  - daily database backup + pruning
 //  - daily cleanup of expired sessions and old logs
 //  - recurring tasks (each due run creates exactly one task, see holding/recurring.js)
+import { retryPendingArtifacts } from '../connections/artifacts.js';
 import { q, now } from '../db/index.js';
 import { getSetting } from '../lib/settings.js';
 import { localDate, localTime } from '../lib/time.js';
@@ -105,6 +106,17 @@ export function runCleanup(at = Date.now()) {
   return out;
 }
 
+let retrying = false;
+function retryUploads() {
+  if (retrying) return;
+  retrying = true;
+  retryPendingArtifacts()
+    .catch(() => {})
+    .finally(() => {
+      retrying = false;
+    });
+}
+
 async function tick() {
   if (busy) return;
   busy = true;
@@ -112,6 +124,7 @@ async function tick() {
     await runDailyReport();
     runDueRecurring();
     maybeSyncTeam(); // new/renamed employees get their Telegram topic (runs in the background)
+    retryUploads(); // files that could not be stored outside yet (Google Drive), in the background
     runBackupIfDue();
     runCleanup();
   } catch (e) {
